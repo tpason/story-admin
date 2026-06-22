@@ -1,0 +1,41 @@
+# Dependencies
+node_modules/
+
+# Next.js build output
+.next/
+out/
+
+# Environment (keep .env.example)
+.env
+.env.local
+.env*.local
+!.env.example
+
+# TypeScript
+*.tsbuildinfo
+
+# Logs / debug
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.swp
+*~
+
+# Local agent coordination (not part of the app)
+.agent/
+.agents/
+.claude/
+.codex/
+
+# Test / coverage
+coverage/
+.nyc_output/
+test-results/
