@@ -13,7 +13,11 @@ import type { Paginated } from "@/lib/types";
 
 const READER_URL = process.env.NEXT_PUBLIC_STORY_READER_URL ?? "http://localhost:3000";
 
-export function ModerationClient() {
+type ModerationClientProps = {
+  canAccessStories?: boolean;
+};
+
+export function ModerationClient({ canAccessStories = false }: ModerationClientProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { pushToast } = useToast();
@@ -109,24 +113,33 @@ export function ModerationClient() {
                           {item.commentText.length > 240 ? "…" : ""}
                         </div>
                         <div style={{ color: "var(--muted)" }}>
-                          Chương {item.chapterNumber} ·{" "}
-                          <Link href={`/stories/${item.storyId}/chapters/${item.chapterNumber}`}>Sửa trong admin</Link>
+                          Chương {item.chapterNumber}
+                          {canAccessStories ? (
+                            <>
+                              {" · "}
+                              <Link href={`/stories/${item.storyId}/chapters/${item.chapterNumber}`}>
+                                Sửa trong admin
+                              </Link>
+                            </>
+                          ) : null}
                         </div>
                       </td>
                       <td style={{ fontSize: "0.85rem" }}>
                         <div>{item.storyTitle}</div>
                         <div style={{ marginTop: 6, display: "flex", flexWrap: "wrap", gap: 8 }}>
-                          <a
-                            href={`${READER_URL}/stories/${item.storyId}/chapters/${item.chapterNumber}`}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="btn btn-ghost btn-sm"
-                          >
-                            Mở reader
-                          </a>
+                        <a
+                          href={`${READER_URL}/stories/${item.storyId}/chapters/${item.chapterNumber}`}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="btn btn-ghost btn-sm"
+                        >
+                          Mở reader
+                        </a>
+                        {canAccessStories ? (
                           <Link href={`/stories/${item.storyId}`} className="btn btn-ghost btn-sm">
                             Admin story
                           </Link>
+                        ) : null}
                         </div>
                       </td>
                       <td>

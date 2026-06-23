@@ -24,6 +24,7 @@ type ChapterSnapshot = {
 type ChapterEditorClientProps = {
   storyId: string;
   chapterNumber: number;
+  canRunPipeline?: boolean;
 };
 
 function snapshotFromChapter(chapter: AdminChapterDetail): ChapterSnapshot {
@@ -35,7 +36,7 @@ function snapshotFromChapter(chapter: AdminChapterDetail): ChapterSnapshot {
   };
 }
 
-export function ChapterEditorClient({ storyId, chapterNumber }: ChapterEditorClientProps) {
+export function ChapterEditorClient({ storyId, chapterNumber, canRunPipeline = true }: ChapterEditorClientProps) {
   const { pushToast } = useToast();
   const [story, setStory] = useState<AdminStoryDetail | null>(null);
   const [chapter, setChapter] = useState<AdminChapterDetail | null>(null);
@@ -390,6 +391,8 @@ export function ChapterEditorClient({ storyId, chapterNumber }: ChapterEditorCli
           <button type="button" className="btn" disabled={saving || !dirty.any} onClick={() => void saveChapter()}>
             {saving ? "Đang lưu..." : dirty.any ? "Lưu thay đổi" : "Đã lưu"}
           </button>
+          {canRunPipeline ? (
+            <>
           <button
             type="button"
             className="btn btn-secondary"
@@ -438,6 +441,8 @@ export function ChapterEditorClient({ storyId, chapterNumber }: ChapterEditorCli
           >
             {enqueueLoading === "audio_segments" ? "..." : "Enqueue segments"}
           </button>
+            </>
+          ) : null}
           <Link className="btn btn-secondary" href={`/stories/${storyId}`}>
             Quay lại
           </Link>

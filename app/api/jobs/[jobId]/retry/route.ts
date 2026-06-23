@@ -1,15 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import { logAdminAction } from "@/lib/admin-audit";
 import { retryAdminJob } from "@/lib/admin-jobs";
-import { requireAdmin } from "@/lib/auth";
+import { requireAdminPermission } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
 type RouteContext = { params: Promise<{ jobId: string }> };
 
 export async function POST(request: NextRequest, context: RouteContext) {
-  const admin = await requireAdmin();
-  if (!admin) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const admin = await requireAdminPermission("jobs");
+  if (!admin) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   const { jobId } = await context.params;
   const body = (await request.json().catch(() => ({}))) as { force?: boolean };

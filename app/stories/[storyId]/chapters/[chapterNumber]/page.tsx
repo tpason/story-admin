@@ -13,7 +13,11 @@ export default async function ChapterEditorPage({ params }: PageProps) {
 
   return (
     <AdminAppShell username={admin.username} adminScope={admin.adminScope}>
-      <ChapterEditorClient storyId={storyId} chapterNumber={chapterNum} />
+      <ChapterEditorClient
+        storyId={storyId}
+        chapterNumber={chapterNum}
+        canRunPipeline={admin.adminScope !== "moderator"}
+      />
     </AdminAppShell>
   );
 }

@@ -6,6 +6,7 @@ import { useCallback, useEffect, useState } from "react";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { LoadingBlock } from "@/components/ui/LoadingBlock";
 import { PageHeader } from "@/components/ui/PageHeader";
+import { useToast } from "@/components/ui/ToastProvider";
 import type { AdminJobRow, Paginated } from "@/lib/types";
 
 const JOB_TYPES = ["", "polish_chapter", "translate_chapter", "audio_chapter", "audio_chapter_segments"];
@@ -14,6 +15,7 @@ const STATUSES = ["", "pending", "running", "failed", "done"];
 export function JobsClient() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const { pushToast } = useToast();
   const [data, setData] = useState<Paginated<AdminJobRow> | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -64,8 +66,14 @@ export function JobsClient() {
       body: JSON.stringify({ force })
     });
     setRetrying(null);
-    if (response.ok) void load();
-    else setError("Retry thất bại");
+    if (response.ok) {
+      pushToast(force ? "Đã force retry job" : "Đã retry job", "success");
+      void load();
+    } else {
+      const msg = "Retry thất bại";
+      setError(msg);
+      pushToast(msg, "error");
+    }
   }
 
   return (

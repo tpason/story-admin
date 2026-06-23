@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { logAdminAction } from "@/lib/admin-audit";
 import { enqueueAudioJob, enqueueAudioSegmentsJob, enqueuePolishJob } from "@/lib/admin-jobs";
 import { repolishChapter, retranslateChapter } from "@/lib/pipeline-actions";
-import { requireAdmin } from "@/lib/auth";
+import { requireAdminPermission } from "@/lib/auth";
 import { query } from "@/lib/db";
 
 export const dynamic = "force-dynamic";
@@ -22,8 +22,8 @@ async function forceResetJob(chapterId: string, jobType: string) {
 }
 
 export async function POST(request: NextRequest, context: RouteContext) {
-  const admin = await requireAdmin();
-  if (!admin) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const admin = await requireAdminPermission("pipeline");
+  if (!admin) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   const { storyId, chapterNumber } = await context.params;
   const chapterNum = Number(chapterNumber);
