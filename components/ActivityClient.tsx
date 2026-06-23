@@ -3,6 +3,9 @@
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
+import { EmptyState } from "@/components/ui/EmptyState";
+import { LoadingBlock } from "@/components/ui/LoadingBlock";
+import { PageHeader } from "@/components/ui/PageHeader";
 import type { ActivityLogRow, Paginated } from "@/lib/types";
 
 export function ActivityClient() {
@@ -39,9 +42,10 @@ export function ActivityClient() {
 
   return (
     <>
-      <div className="admin-header">
-        <h1>Activity log</h1>
-      </div>
+      <PageHeader
+        title="Nhật ký hoạt động"
+        description="Lịch sử thao tác của admin trên pipeline."
+      />
       <div className="panel">
         <div className="toolbar">
           <input
@@ -57,8 +61,11 @@ export function ActivityClient() {
             Làm mới
           </button>
         </div>
-        {loading ? <p>Đang tải...</p> : null}
-        {!loading && data ? (
+        {loading ? <LoadingBlock variant="table" rows={8} /> : null}
+        {!loading && data && data.items.length === 0 ? (
+          <EmptyState title="Chưa có hoạt động" description="Các thao tác admin sẽ hiển thị tại đây." />
+        ) : null}
+        {!loading && data && data.items.length > 0 ? (
           <>
             <div className="table-wrap">
               <table className="data-table">

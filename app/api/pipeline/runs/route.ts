@@ -2,13 +2,13 @@ import { NextRequest, NextResponse } from "next/server";
 import { logAdminAction } from "@/lib/admin-audit";
 import { listPipelineRuns } from "@/lib/admin-pipeline-runs";
 import { isAsyncPipelineAction, startAsyncPipelineRun } from "@/lib/pipeline-async";
-import { requireAdmin } from "@/lib/auth";
+import { requireAdminPermission } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(request: NextRequest) {
-  const admin = await requireAdmin();
-  if (!admin) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const admin = await requireAdminPermission("pipeline");
+  if (!admin) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   const params = request.nextUrl.searchParams;
   const data = await listPipelineRuns({
@@ -23,8 +23,8 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-  const admin = await requireAdmin();
-  if (!admin) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const admin = await requireAdminPermission("pipeline");
+  if (!admin) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   const body = (await request.json().catch(() => null)) as {
     action?: string;

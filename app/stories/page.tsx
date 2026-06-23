@@ -1,18 +1,17 @@
 import { Suspense } from "react";
-import { AdminShell } from "@/components/AdminShell";
+import { AdminAppShell } from "@/components/AdminAppShell";
 import { StoriesClient } from "@/components/StoriesClient";
-import { getCurrentAdmin } from "@/lib/auth";
-import { redirect } from "next/navigation";
+import { LoadingBlock } from "@/components/ui/LoadingBlock";
+import { requireAdminPage } from "@/lib/admin-page-guard";
 
 export default async function StoriesPage() {
-  const admin = await getCurrentAdmin();
-  if (!admin) redirect("/login");
+  const admin = await requireAdminPage("/stories");
 
   return (
-    <AdminShell username={admin.username}>
-      <Suspense fallback={<p>Đang tải...</p>}>
+    <AdminAppShell username={admin.username} adminScope={admin.adminScope}>
+      <Suspense fallback={<LoadingBlock variant="table" rows={8} />}>
         <StoriesClient />
       </Suspense>
-    </AdminShell>
+    </AdminAppShell>
   );
 }

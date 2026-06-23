@@ -102,6 +102,56 @@ export async function getDashboardStats(): Promise<CoreDashboardStats> {
   };
 }
 
+export async function getDashboardTrends(days = 7) {
+  const safeDays = Math.min(30, Math.max(1, days));
+  const rows = await query<{
+    day: Date;
+    polished_chapters: string;
+    jobs_done: string;
+    jobs_failed: string;
+    pipeline_failed: string;
+  }>(
+    `
+      WITH day_series AS (
+        SELECT generate_series(
+          (CURRENT_DATE - (($1::int - 1) * INTERVAL '1 day'))::date,
+          CURRENT_DATE::date,
+          INTERVAL '1 day'
+        )::date AS day
+      )
+      SELECT
+        ds.day,
+        COALESCE((
+          SELECT COUNT(*)::text FROM chapters c
+          WHERE c.polished_at IS NOT NULL AND c.polished_at::date = ds.day
+        ), '0') AS polished_chapters,
+        COALESCE((
+          SELECT COUNT(*)::text FROM story_jobs j
+          WHERE j.status = 'done' AND j.updated_at::date = ds.day
+        ), '0') AS jobs_done,
+        COALESCE((
+          SELECT COUNT(*)::text FROM story_jobs j
+          WHERE j.status = 'failed' AND j.updated_at::date = ds.day
+        ), '0') AS jobs_failed,
+        COALESCE((
+          SELECT COUNT(*)::text FROM admin_pipeline_runs r
+          WHERE r.status = 'failed' AND r.created_at::date = ds.day
+        ), '0') AS pipeline_failed
+      FROM day_series ds
+      ORDER BY ds.day ASC
+    `,
+    [safeDays]
+  );
+
+  return rows.map((row) => ({
+    date: row.day.toISOString().slice(0, 10),
+    polishedChapters: Number(row.polished_chapters),
+    jobsDone: Number(row.jobs_done),
+    jobsFailed: Number(row.jobs_failed),
+    pipelineRunsFailed: Number(row.pipeline_failed)
+  }));
+}
+
 export async function listAdminStories(options: {
   page?: number;
   pageSize?: number;
@@ -435,6 +485,7 @@ export async function getAdminChapter(storyId: string, chapterNumber: number): P
       raw_text_content: string | null;
       translated_text_content: string | null;
       polished_text_content: string | null;
+      audio_path: string | null;
     }
   >(
     `
@@ -465,6 +516,7 @@ export async function getAdminChapter(storyId: string, chapterNumber: number): P
         c.raw_text_content,
         c.translated_text_content,
         c.polished_text_content,
+        c.audio_path,
         COALESCE(c.polished_at, c.updated_at, c.created_at) AS updated_at
       FROM chapters c
       WHERE c.story_id = $1 AND c.chapter_number = $2
@@ -488,6 +540,7 @@ export async function getAdminChapter(storyId: string, chapterNumber: number): P
     rawTextContent: rows[0].raw_text_content,
     translatedTextContent: rows[0].translated_text_content,
     polishedTextContent: rows[0].polished_text_content,
+    audioPath: rows[0].audio_path,
     contentSource
   };
 }
@@ -502,11 +555,19 @@ export async function updateAdminStory(
     description?: string | null;
     category?: string | null;
     status?: string | null;
+    coverImageUrl?: string | null;
     totalChapters?: number | null;
     isCompleted?: boolean | null;
     isActive?: boolean | null;
   }
 ) {
+  if (patch.coverImageUrl !== undefined) {
+    await query(
+      `UPDATE stories SET cover_image_url = $2, updated_at = now() WHERE id = $1`,
+      [storyId, patch.coverImageUrl]
+    );
+  }
+
   await query(
     `
       UPDATE stories

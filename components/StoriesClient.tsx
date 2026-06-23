@@ -3,6 +3,9 @@
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
+import { EmptyState } from "@/components/ui/EmptyState";
+import { LoadingBlock } from "@/components/ui/LoadingBlock";
+import { PageHeader } from "@/components/ui/PageHeader";
 import type { AdminStoryRow, Paginated } from "@/lib/types";
 
 type StoriesResponse = Paginated<AdminStoryRow> & { sources: string[] };
@@ -56,9 +59,10 @@ export function StoriesClient() {
 
   return (
     <>
-      <div className="admin-header">
-        <h1>Quản lý truyện</h1>
-      </div>
+      <PageHeader
+        title="Quản lý truyện"
+        description="Tìm kiếm, lọc và chỉnh sửa metadata truyện trong pipeline."
+      />
 
       <div className="panel">
         <div className="toolbar">
@@ -106,9 +110,16 @@ export function StoriesClient() {
         </div>
 
         {error ? <div className="alert alert-error">{error}</div> : null}
-        {loading ? <p>Đang tải...</p> : null}
+        {loading ? <LoadingBlock variant="table" rows={8} /> : null}
 
-        {!loading && data ? (
+        {!loading && data && data.items.length === 0 ? (
+          <EmptyState
+            title="Không tìm thấy truyện"
+            description="Thử đổi bộ lọc hoặc từ khóa tìm kiếm."
+          />
+        ) : null}
+
+        {!loading && data && data.items.length > 0 ? (
           <>
             <div className="table-wrap">
               <table className="data-table">
@@ -150,7 +161,9 @@ export function StoriesClient() {
                         {story.isCompleted ? <span className="badge badge-ok">complete</span> : null}
                       </td>
                       <td>
-                        <Link href={`/stories/${story.id}`}>Sửa</Link>
+                        <Link href={`/stories/${story.id}`} className="btn btn-ghost btn-sm">
+                          Chi tiết
+                        </Link>
                       </td>
                     </tr>
                   ))}

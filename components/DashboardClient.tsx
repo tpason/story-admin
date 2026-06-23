@@ -2,11 +2,15 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import type { AdminJobRow, DashboardStats, PipelineRunSummary } from "@/lib/types";
+import { EmptyState } from "@/components/ui/EmptyState";
+import { LoadingBlock } from "@/components/ui/LoadingBlock";
+import { PageHeader } from "@/components/ui/PageHeader";
+import type { AdminJobRow, DashboardStats, DashboardTrendDay, PipelineRunSummary } from "@/lib/types";
 
 type DashboardPayload = DashboardStats & {
   recentFailed: AdminJobRow[];
   recentPipelineRuns: PipelineRunSummary[];
+  trends: DashboardTrendDay[];
 };
 
 const RUN_ACTION_LABELS: Record<string, string> = {
@@ -29,6 +33,30 @@ function runStatusBadge(status: string) {
   }
 }
 
+function jobStatusBadge(status: string) {
+  switch (status) {
+    case "pending":
+      return "badge badge-muted";
+    case "running":
+      return "badge badge-warn";
+    case "done":
+      return "badge badge-success";
+    case "failed":
+      return "badge badge-danger";
+    default:
+      return "badge badge-muted";
+  }
+}
+
+function formatTrendDate(isoDate: string) {
+  const date = new Date(`${isoDate}T12:00:00`);
+  return date.toLocaleDateString("vi-VN", { weekday: "short", day: "2-digit", month: "2-digit" });
+}
+
+function trendMax(values: number[]) {
+  return Math.max(1, ...values);
+}
+
 export function DashboardClient() {
   const [data, setData] = useState<DashboardPayload | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -45,77 +73,157 @@ export function DashboardClient() {
   }, []);
 
   if (error) return <div className="alert alert-error">{error}</div>;
-  if (!data) return <p>Đang tải dashboard...</p>;
+  if (!data) {
+    return (
+      <>
+        <PageHeader title="Tổng quan" description="Thống kê pipeline và hoạt động gần đây." />
+        <LoadingBlock variant="stats" />
+      </>
+    );
+  }
 
   return (
     <>
-      <div className="admin-header">
-        <h1>Dashboard</h1>
-        <div style={{ display: "flex", gap: 8 }}>
-          <Link href="/operations" className="btn btn-secondary">
-            Scripts
-          </Link>
-          <Link href="/activity" className="btn btn-secondary">
-            Activity log
-          </Link>
-          <Link href="/jobs" className="btn btn-secondary">
-            Jobs
-          </Link>
-        </div>
-      </div>
+      <PageHeader
+        title="Tổng quan"
+        description="Thống kê pipeline và hoạt động gần đây."
+        actions={
+          <>
+            <Link href="/operations" className="btn btn-secondary">
+              Scripts
+            </Link>
+            <Link href="/activity" className="btn btn-secondary">
+              Nhật ký
+            </Link>
+            <Link href="/jobs" className="btn btn-secondary">
+              Hàng đợi
+            </Link>
+          </>
+        }
+      />
+
       <div className="stats-grid">
         <div className="stat-card">
           <strong>{data.totalStories}</strong>
-          <span>Truyện ({data.activeStories} active)</span>
+          <span>Truyện ({data.activeStories} đang active)</span>
         </div>
         <div className="stat-card">
           <strong>{data.totalChapters}</strong>
           <span>Chapters</span>
         </div>
-        <div className="stat-card">
+        <div className="stat-card accent">
           <strong>{data.polishedChapters}</strong>
-          <span>Polished</span>
+          <span>Đã polish</span>
         </div>
         <div className="stat-card">
           <strong>{data.translatedChapters}</strong>
-          <span>Translated</span>
+          <span>Đã dịch</span>
         </div>
         <div className="stat-card">
           <strong>{data.audioChapters}</strong>
-          <span>Audio</span>
+          <span>Có audio</span>
         </div>
-        <div className="stat-card">
+        <div className="stat-card warning">
           <strong>{data.pendingJobs}</strong>
-          <span>Jobs pending</span>
+          <span>Jobs chờ xử lý</span>
         </div>
         <div className="stat-card">
           <strong>{data.runningJobs}</strong>
-          <span>Jobs running</span>
+          <span>Jobs đang chạy</span>
         </div>
-        <div className="stat-card">
+        <div className="stat-card danger">
           <strong>{data.failedJobs}</strong>
-          <span>Jobs failed</span>
+          <span>Jobs thất bại</span>
         </div>
         <div className="stat-card">
           <strong>{data.runningPipelineRuns}</strong>
-          <span>Scripts running</span>
+          <span>Scripts đang chạy</span>
         </div>
-        <div className="stat-card">
+        <div className="stat-card danger">
           <strong>{data.failedPipelineRuns24h}</strong>
-          <span>Scripts failed (24h)</span>
+          <span>Scripts lỗi (24h)</span>
         </div>
       </div>
 
-      {data.recentPipelineRuns.length > 0 ? (
-        <div className="panel" style={{ marginTop: 16 }}>
-          <h2 style={{ marginTop: 0 }}>Pipeline scripts gần đây</h2>
+      {data.trends?.length ? (
+        <div className="panel" style={{ marginTop: 20 }}>
+          <div className="panel-header">
+            <div>
+              <h2>Xu hướng 7 ngày</h2>
+              <p>Polished chapters và jobs theo ngày</p>
+            </div>
+          </div>
+          <div className="trend-legend">
+            <span><span className="trend-swatch polished" aria-hidden /> Polished</span>
+            <span><span className="trend-swatch done" aria-hidden /> Jobs done</span>
+            <span><span className="trend-swatch failed" aria-hidden /> Jobs failed</span>
+            <span><span className="trend-swatch pipeline" aria-hidden /> Scripts failed</span>
+          </div>
+          <div className="trend-chart">
+            {data.trends.map((day) => {
+              const max = trendMax([
+                day.polishedChapters,
+                day.jobsDone,
+                day.jobsFailed,
+                day.pipelineRunsFailed
+              ]);
+              return (
+                <div key={day.date} className="trend-column">
+                  <div className="trend-bars" aria-hidden>
+                    <div
+                      className="trend-bar polished"
+                      style={{ height: `${(day.polishedChapters / max) * 100}%` }}
+                      title={`Polished: ${day.polishedChapters}`}
+                    />
+                    <div
+                      className="trend-bar done"
+                      style={{ height: `${(day.jobsDone / max) * 100}%` }}
+                      title={`Jobs done: ${day.jobsDone}`}
+                    />
+                    <div
+                      className="trend-bar failed"
+                      style={{ height: `${(day.jobsFailed / max) * 100}%` }}
+                      title={`Jobs failed: ${day.jobsFailed}`}
+                    />
+                    <div
+                      className="trend-bar pipeline"
+                      style={{ height: `${(day.pipelineRunsFailed / max) * 100}%` }}
+                      title={`Scripts failed: ${day.pipelineRunsFailed}`}
+                    />
+                  </div>
+                  <div className="trend-label">{formatTrendDate(day.date)}</div>
+                  <div className="trend-values">
+                    <span>P {day.polishedChapters}</span>
+                    <span>✓ {day.jobsDone}</span>
+                    <span>✗ {day.jobsFailed}</span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      ) : null}
+
+      <div className="panel" style={{ marginTop: 20 }}>
+        <div className="panel-header">
+          <div>
+            <h2>Pipeline scripts gần đây</h2>
+            <p>Discovery, crawl và các script chạy thủ công</p>
+          </div>
+          <Link href="/operations" className="btn btn-ghost btn-sm">
+            Xem tất cả
+          </Link>
+        </div>
+        {data.recentPipelineRuns.length === 0 ? (
+          <EmptyState title="Chưa có script nào chạy" description="Chạy discovery hoặc crawl từ trang Scripts." />
+        ) : (
           <div className="table-wrap">
             <table className="data-table">
               <thead>
                 <tr>
                   <th>Thời gian</th>
                   <th>Action</th>
-                  <th>Status</th>
+                  <th>Trạng thái</th>
                   <th>Story</th>
                   <th />
                 </tr>
@@ -136,27 +244,40 @@ export function DashboardClient() {
                       )}
                     </td>
                     <td>
-                      <Link href={`/operations?run=${run.id}`}>Log</Link>
+                      <Link href={`/operations?run=${run.id}`} className="btn btn-ghost btn-sm">
+                        Xem log
+                      </Link>
                     </td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
-        </div>
-      ) : null}
+        )}
+      </div>
 
-      {data.recentFailed.length > 0 ? (
-        <div className="panel" style={{ marginTop: 16 }}>
-          <h2 style={{ marginTop: 0 }}>Jobs failed gần đây</h2>
+      <div className="panel">
+        <div className="panel-header">
+          <div>
+            <h2>Jobs thất bại gần đây</h2>
+            <p>Các job polish/dịch/audio cần xử lý</p>
+          </div>
+          <Link href="/jobs?status=failed" className="btn btn-ghost btn-sm">
+            Xem tất cả
+          </Link>
+        </div>
+        {data.recentFailed.length === 0 ? (
+          <EmptyState title="Không có job thất bại" description="Pipeline đang chạy ổn định." />
+        ) : (
           <div className="table-wrap">
             <table className="data-table">
               <thead>
                 <tr>
-                  <th>Type</th>
-                  <th>Story</th>
+                  <th>Loại</th>
+                  <th>Trạng thái</th>
+                  <th>Truyện</th>
                   <th>Chapter</th>
-                  <th>Error</th>
+                  <th>Lỗi</th>
                 </tr>
               </thead>
               <tbody>
@@ -164,25 +285,37 @@ export function DashboardClient() {
                   <tr key={job.id}>
                     <td>{job.jobType}</td>
                     <td>
-                      {job.storyId ? <Link href={`/stories/${job.storyId}`}>{job.storyTitle ?? job.storyId}</Link> : "—"}
+                      <span className={jobStatusBadge(job.status)}>{job.status}</span>
                     </td>
                     <td>
-                      {job.storyId && job.chapterNumber ? (
-                        <Link href={`/stories/${job.storyId}/chapters/${job.chapterNumber}`}>Ch.{job.chapterNumber}</Link>
+                      {job.storyId ? (
+                        <Link href={`/stories/${job.storyId}`}>{job.storyTitle ?? job.storyId}</Link>
                       ) : (
                         "—"
                       )}
                     </td>
-                    <td style={{ fontSize: "0.82rem", color: "var(--muted)" }}>
-                      {job.lastError?.slice(0, 120) ?? "—"}
+                    <td>
+                      {job.storyId && job.chapterNumber ? (
+                        <Link href={`/stories/${job.storyId}/chapters/${job.chapterNumber}`}>
+                          Ch.{job.chapterNumber}
+                        </Link>
+                      ) : (
+                        "—"
+                      )}
+                    </td>
+                    <td style={{ fontSize: "0.82rem", color: "var(--muted)", maxWidth: 320 }}>
+                      <details>
+                        <summary style={{ cursor: "pointer" }}>{job.lastError?.slice(0, 80) ?? "—"}</summary>
+                        {job.lastError}
+                      </details>
                     </td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
-        </div>
-      ) : null}
+        )}
+      </div>
     </>
   );
 }

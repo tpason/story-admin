@@ -2,6 +2,9 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { LoadingBlock } from "@/components/ui/LoadingBlock";
+import { PageHeader } from "@/components/ui/PageHeader";
+import { useToast } from "@/components/ui/ToastProvider";
 import type { Paginated } from "@/lib/types";
 
 type PipelineRun = {
@@ -33,12 +36,12 @@ type OperationsClientProps = {
 };
 
 export function OperationsClient({ initialRunId = null }: OperationsClientProps) {
+  const { pushToast } = useToast();
   const [runs, setRuns] = useState<Paginated<PipelineRun> | null>(null);
   const [selectedRunId, setSelectedRunId] = useState<string | null>(initialRunId);
   const [selectedRun, setSelectedRun] = useState<PipelineRun | null>(null);
   const [loading, setLoading] = useState(true);
   const [starting, setStarting] = useState<string | null>(null);
-  const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const [discoverForm, setDiscoverForm] = useState({ pages: 2, minChapters: 30, sources: "" });
@@ -97,7 +100,6 @@ export function OperationsClient({ initialRunId = null }: OperationsClientProps)
 
   async function startRun(action: string, args: Record<string, unknown>, storyId?: string) {
     setStarting(action);
-    setMessage(null);
     setError(null);
     const response = await fetch("/api/pipeline/runs", {
       method: "POST",
@@ -111,7 +113,7 @@ export function OperationsClient({ initialRunId = null }: OperationsClientProps)
       return;
     }
     const payload = (await response.json()) as { run: PipelineRun };
-    setMessage(`Đã bắt đầu ${ACTION_LABELS[action] ?? action}`);
+    pushToast(`Đã bắt đầu ${ACTION_LABELS[action] ?? action}`, "success");
     setSelectedRunId(payload.run.id);
     setSelectedRun(payload.run);
     void loadRuns();
@@ -143,16 +145,11 @@ export function OperationsClient({ initialRunId = null }: OperationsClientProps)
 
   return (
     <>
-      <div className="admin-header">
-        <div>
-          <h1>Pipeline scripts</h1>
-          <p style={{ color: "var(--muted)", margin: 0 }}>
-            Chạy thủ công discovery/crawl — delegate tới script Python có sẵn. Log lưu trong DB.
-          </p>
-        </div>
-      </div>
+      <PageHeader
+        title="Pipeline scripts"
+        description="Chạy thủ công discovery/crawl — delegate tới script Python. Log lưu trong DB."
+      />
 
-      {message ? <div className="alert alert-success">{message}</div> : null}
       {error ? <div className="alert alert-error">{error}</div> : null}
 
       <div className="panel">
@@ -290,7 +287,7 @@ export function OperationsClient({ initialRunId = null }: OperationsClientProps)
       <div className="panel">
         <h2 style={{ marginTop: 0 }}>Lịch sử chạy</h2>
         {loading ? (
-          <p>Đang tải...</p>
+          <LoadingBlock variant="table" rows={6} />
         ) : runs ? (
           <div className="operations-layout">
             <div className="table-wrap">

@@ -21,16 +21,41 @@ function defaultPythonPath() {
 
 function dockerExecArgs(cliArgs: string[]) {
   const service = process.env.STORY_PIPELINE_DOCKER_SERVICE ?? "story-pipeline-cli";
+  const profile = process.env.STORY_PIPELINE_DOCKER_COMPOSE_PROFILE ?? "tools";
+  const composeFile = path.join(REPO_ROOT, "docker-compose.yml");
   const useRun = process.env.STORY_PIPELINE_DOCKER_MODE !== "exec";
   if (useRun) {
     return {
       command: "docker",
-      args: ["compose", "run", "--rm", "--no-deps", service, ...cliArgs]
+      args: [
+        "compose",
+        "-f",
+        composeFile,
+        "--profile",
+        profile,
+        "run",
+        "--rm",
+        "--no-deps",
+        service,
+        ...cliArgs
+      ]
     };
   }
   return {
     command: "docker",
-    args: ["compose", "exec", "-T", service, "python", `/app/${CLI_SCRIPT}`, ...cliArgs]
+    args: [
+      "compose",
+      "-f",
+      composeFile,
+      "--profile",
+      profile,
+      "exec",
+      "-T",
+      service,
+      "python",
+      `/app/${CLI_SCRIPT}`,
+      ...cliArgs
+    ]
   };
 }
 

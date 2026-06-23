@@ -3,6 +3,9 @@
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
+import { EmptyState } from "@/components/ui/EmptyState";
+import { LoadingBlock } from "@/components/ui/LoadingBlock";
+import { PageHeader } from "@/components/ui/PageHeader";
 import type { AdminJobRow, Paginated } from "@/lib/types";
 
 const JOB_TYPES = ["", "polish_chapter", "translate_chapter", "audio_chapter", "audio_chapter_segments"];
@@ -67,9 +70,10 @@ export function JobsClient() {
 
   return (
     <>
-      <div className="admin-header">
-        <h1>Job queue</h1>
-      </div>
+      <PageHeader
+        title="Hàng đợi jobs"
+        description="Theo dõi và retry các job polish, dịch, audio trong pipeline."
+      />
 
       <div className="panel">
         <div className="toolbar">
@@ -102,9 +106,13 @@ export function JobsClient() {
         </div>
 
         {error ? <div className="alert alert-error">{error}</div> : null}
-        {loading ? <p>Đang tải...</p> : null}
+        {loading ? <LoadingBlock variant="table" rows={10} /> : null}
 
-        {!loading && data ? (
+        {!loading && data && data.items.length === 0 ? (
+          <EmptyState title="Không có job" description="Thử đổi bộ lọc status hoặc loại job." />
+        ) : null}
+
+        {!loading && data && data.items.length > 0 ? (
           <>
             <div className="table-wrap">
               <table className="data-table">
@@ -146,7 +154,14 @@ export function JobsClient() {
                         {job.attempts}/{job.maxAttempts}
                       </td>
                       <td style={{ maxWidth: 280, fontSize: "0.82rem", color: "var(--muted)" }}>
-                        {job.lastError ? job.lastError.slice(0, 160) : "—"}
+                        {job.lastError ? (
+                          <details>
+                            <summary style={{ cursor: "pointer" }}>{job.lastError.slice(0, 80)}…</summary>
+                            {job.lastError}
+                          </details>
+                        ) : (
+                          "—"
+                        )}
                       </td>
                       <td>
                         {job.status === "failed" || job.status === "done" ? (

@@ -1,22 +1,20 @@
 import { Suspense } from "react";
-import { AdminShell } from "@/components/AdminShell";
+import { AdminAppShell } from "@/components/AdminAppShell";
 import { StoryDetailClient } from "@/components/StoryDetailClient";
-import { getCurrentAdmin } from "@/lib/auth";
-import { redirect } from "next/navigation";
+import { LoadingBlock } from "@/components/ui/LoadingBlock";
+import { requireAdminPage } from "@/lib/admin-page-guard";
 
 type PageProps = { params: Promise<{ storyId: string }> };
 
 export default async function StoryDetailPage({ params }: PageProps) {
-  const admin = await getCurrentAdmin();
-  if (!admin) redirect("/login");
-
+  const admin = await requireAdminPage("/stories");
   const { storyId } = await params;
 
   return (
-    <AdminShell username={admin.username}>
-      <Suspense fallback={<p>Đang tải...</p>}>
-        <StoryDetailClient storyId={storyId} />
+    <AdminAppShell username={admin.username} adminScope={admin.adminScope}>
+      <Suspense fallback={<LoadingBlock variant="table" rows={10} />}>
+        <StoryDetailClient storyId={storyId} canRunPipeline={admin.adminScope !== "moderator"} />
       </Suspense>
-    </AdminShell>
+    </AdminAppShell>
   );
 }

@@ -17,6 +17,9 @@ WORKDIR /app
 ENV NODE_ENV=production \
     NEXT_TELEMETRY_DISABLED=1
 
+# story-admin pipeline actions use `docker compose run story-pipeline-cli`
+RUN apk add --no-cache docker-cli docker-cli-compose
+
 COPY --from=builder /app/package.json ./package.json
 COPY --from=builder /app/package-lock.json ./package-lock.json
 COPY --from=builder /app/node_modules ./node_modules

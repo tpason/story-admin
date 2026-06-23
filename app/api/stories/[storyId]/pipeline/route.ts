@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { logAdminAction } from "@/lib/admin-audit";
-import { requireAdmin } from "@/lib/auth";
+import { requireAdminPermission } from "@/lib/auth";
 import { startAsyncPipelineRun } from "@/lib/pipeline-async";
 import {
   bulkPipelineChapters,
@@ -37,8 +37,8 @@ function parseChapterNumbers(body: PipelineBody | null) {
 }
 
 export async function POST(request: NextRequest, context: RouteContext) {
-  const admin = await requireAdmin();
-  if (!admin) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const admin = await requireAdminPermission("pipeline");
+  if (!admin) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   const { storyId } = await context.params;
   const body = (await request.json().catch(() => null)) as PipelineBody | null;

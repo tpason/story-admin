@@ -15,6 +15,14 @@ export type DashboardStats = CoreDashboardStats & {
   failedPipelineRuns24h: number;
 };
 
+export type DashboardTrendDay = {
+  date: string;
+  polishedChapters: number;
+  jobsDone: number;
+  jobsFailed: number;
+  pipelineRunsFailed: number;
+};
+
 export type PipelineRunSummary = {
   id: string;
   action: string;
@@ -74,6 +82,7 @@ export type AdminChapterDetail = AdminChapterSummary & {
   translatedTextContent: string | null;
   polishedTextContent: string | null;
   contentSource: "polished" | "translated" | "raw" | null;
+  audioPath: string | null;
 };
 
 export type Paginated<T> = {
@@ -121,6 +130,9 @@ export type AdminUserRow = {
   username: string;
   email: string | null;
   role: "reader" | "admin";
+  adminScope: import("@/lib/admin-rbac").AdminScope | null;
+  commentBannedPermanent: boolean;
+  commentBannedUntil: string | null;
   createdAt: string;
   updatedAt: string;
 };

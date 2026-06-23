@@ -37,15 +37,17 @@ export function LoginForm() {
 
   return (
     <form className="panel form-grid login-card" onSubmit={onSubmit}>
-      <h1 style={{ margin: 0 }}>BetterBox Admin</h1>
-      <p style={{ margin: 0, color: "var(--muted)" }}>Chỉ tài khoản admin (`reader_users.role = admin`) được phép.</p>
+      <div>
+        <h2>Đăng nhập</h2>
+        <p className="login-subtitle">Chỉ tài khoản admin (`reader_users.role = admin`) được phép truy cập.</p>
+      </div>
       {error ? <div className="alert alert-error">{error}</div> : null}
       <label>
-        Username
+        Tên đăng nhập
         <input value={username} onChange={(event) => setUsername(event.target.value)} autoComplete="username" required />
       </label>
       <label>
-        Password
+        Mật khẩu
         <input
           type="password"
           value={password}
@@ -55,7 +57,7 @@ export function LoginForm() {
         />
       </label>
       <div className="form-actions">
-        <button type="submit" className="btn" disabled={loading}>
+        <button type="submit" className="btn" disabled={loading} style={{ width: "100%" }}>
           {loading ? "Đang đăng nhập..." : "Đăng nhập"}
         </button>
       </div>

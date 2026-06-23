@@ -1,11 +1,16 @@
-import { NextResponse, type NextRequest } from "next/server";
+import type { NextRequest } from "next/server";
+import { NextResponse } from "next/server";
 import { SESSION_COOKIE } from "@/lib/auth-constants";
 
 const PUBLIC_PATHS = new Set(["/login", "/api/auth/login", "/api/health"]);
 
+function isPublicCoverRoute(pathname: string) {
+  return /^\/api\/stories\/[^/]+\/cover$/.test(pathname);
+}
+
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
-  if (PUBLIC_PATHS.has(pathname)) {
+  if (PUBLIC_PATHS.has(pathname) || isPublicCoverRoute(pathname)) {
     return NextResponse.next();
   }
 

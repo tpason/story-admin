@@ -1,15 +1,13 @@
-import { AdminShell } from "@/components/AdminShell";
+import { AdminAppShell } from "@/components/AdminAppShell";
 import { DashboardClient } from "@/components/DashboardClient";
-import { getCurrentAdmin } from "@/lib/auth";
-import { redirect } from "next/navigation";
+import { requireAdminPage } from "@/lib/admin-page-guard";
 
 export default async function DashboardPage() {
-  const admin = await getCurrentAdmin();
-  if (!admin) redirect("/login");
+  const admin = await requireAdminPage("/");
 
   return (
-    <AdminShell username={admin.username}>
+    <AdminAppShell username={admin.username} adminScope={admin.adminScope}>
       <DashboardClient />
-    </AdminShell>
+    </AdminAppShell>
   );
 }

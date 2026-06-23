@@ -15,6 +15,21 @@ function cleanText(value: unknown, maxLength: number) {
   return trimmed ? trimmed.slice(0, maxLength) : null;
 }
 
+function cleanCoverUrl(value: unknown) {
+  if (value === undefined) return undefined;
+  if (value === null) return null;
+  if (typeof value !== "string") return undefined;
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  try {
+    const url = new URL(trimmed);
+    if (url.protocol !== "http:" && url.protocol !== "https:") return undefined;
+    return trimmed.slice(0, 2000);
+  } catch {
+    return undefined;
+  }
+}
+
 export async function GET(_request: NextRequest, context: RouteContext) {
   const admin = await requireAdmin();
   if (!admin) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -48,6 +63,7 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
     description: cleanText(body.description, 8000),
     category: cleanText(body.category, 120),
     status: cleanText(body.status, 120),
+    ...(body.coverImageUrl !== undefined ? { coverImageUrl: cleanCoverUrl(body.coverImageUrl) ?? null } : {}),
     totalChapters: totalChapters ?? null,
     isCompleted: typeof body.isCompleted === "boolean" ? body.isCompleted : undefined,
     isActive: typeof body.isActive === "boolean" ? body.isActive : undefined

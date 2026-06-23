@@ -1,5 +1,6 @@
 import { promisify } from "node:util";
 import { cookies } from "next/headers";
+import { hasPermission, normalizeAdminScope, type AdminPermission, type AdminScope } from "@/lib/admin-rbac";
 import { query } from "@/lib/db";
 import { SESSION_COOKIE } from "@/lib/auth-constants";
 
@@ -11,6 +12,7 @@ export type AdminUser = {
   id: string;
   username: string;
   email: string | null;
+  adminScope: AdminScope;
 };
 
 type UserRow = {
@@ -19,6 +21,7 @@ type UserRow = {
   email: string | null;
   password_hash: string;
   role: "reader" | "admin";
+  admin_scope: string | null;
 };
 
 function normalizeUsername(username: string) {
@@ -34,8 +37,13 @@ async function hashToken(token: string) {
   return createHash("sha256").update(token).digest("hex");
 }
 
-function mapUser(row: Pick<UserRow, "id" | "username" | "email">): AdminUser {
-  return { id: row.id, username: row.username, email: row.email };
+function mapUser(row: Pick<UserRow, "id" | "username" | "email" | "admin_scope">): AdminUser {
+  return {
+    id: row.id,
+    username: row.username,
+    email: row.email,
+    adminScope: normalizeAdminScope(row.admin_scope)
+  };
 }
 
 export function cleanAuthInput(value: unknown) {
@@ -65,7 +73,7 @@ export async function verifyPassword(password: string, passwordHash: string) {
 export async function findAdminByUsername(username: string) {
   const rows = await query<UserRow>(
     `
-      SELECT id, username, email, password_hash, role
+      SELECT id, username, email, password_hash, role, admin_scope
       FROM reader_users
       WHERE normalized_username = $1 AND role = 'admin'
       LIMIT 1
@@ -119,7 +127,7 @@ export async function getCurrentAdmin() {
 
   const rows = await query<UserRow>(
     `
-      SELECT u.id, u.username, u.email, u.password_hash, u.role
+      SELECT u.id, u.username, u.email, u.password_hash, u.role, u.admin_scope
       FROM reader_sessions s
       JOIN reader_users u ON u.id = s.user_id
       WHERE s.token_hash = $1
@@ -136,5 +144,12 @@ export async function getCurrentAdmin() {
 export async function requireAdmin() {
   const admin = await getCurrentAdmin();
   if (!admin) return null;
+  return admin;
+}
+
+export async function requireAdminPermission(permission: AdminPermission) {
+  const admin = await requireAdmin();
+  if (!admin) return null;
+  if (!hasPermission(admin.adminScope, permission)) return null;
   return admin;
 }

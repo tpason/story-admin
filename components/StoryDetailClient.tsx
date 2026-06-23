@@ -3,22 +3,38 @@
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
+import { LoadingBlock } from "@/components/ui/LoadingBlock";
+import { PageHeader } from "@/components/ui/PageHeader";
+import { useToast } from "@/components/ui/ToastProvider";
 import type { AdminChapterSummary, AdminStoryDetail, Paginated } from "@/lib/types";
 
 const READER_URL = process.env.NEXT_PUBLIC_STORY_READER_URL ?? "http://localhost:3000";
 
+type PipelineAction = "recrawl" | "recrawl_chapters" | "translate_metadata" | "repolish" | "retranslate";
+type BulkAction = "polish" | "audio" | "audio_segments" | "repolish" | "retranslate";
+
+type PendingConfirm =
+  | {
+      kind: "pipeline";
+      action: PipelineAction;
+      options?: { clearRaw?: boolean; qualityOnly?: boolean; skipChapterTitles?: boolean };
+    }
+  | { kind: "bulk"; action: BulkAction };
+
 type StoryDetailClientProps = {
   storyId: string;
+  canRunPipeline?: boolean;
 };
 
-export function StoryDetailClient({ storyId }: StoryDetailClientProps) {
+export function StoryDetailClient({ storyId, canRunPipeline = true }: StoryDetailClientProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const { pushToast } = useToast();
   const [story, setStory] = useState<AdminStoryDetail | null>(null);
   const [chapters, setChapters] = useState<Paginated<AdminChapterSummary> | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const page = Number(searchParams.get("page") ?? 1);
@@ -36,6 +52,8 @@ export function StoryDetailClient({ storyId }: StoryDetailClientProps) {
   const [charMap, setCharMap] = useState("");
   const [charMapMeta, setCharMapMeta] = useState<{ updatedAt: string | null; updatedToChapter: number | null } | null>(null);
   const [charMapSaving, setCharMapSaving] = useState(false);
+  const [coverUploading, setCoverUploading] = useState(false);
+  const [pendingConfirm, setPendingConfirm] = useState<PendingConfirm | null>(null);
 
   const [form, setForm] = useState({
     title: "",
@@ -45,6 +63,7 @@ export function StoryDetailClient({ storyId }: StoryDetailClientProps) {
     description: "",
     category: "",
     status: "",
+    coverImageUrl: "",
     totalChapters: 0,
     isCompleted: false,
     isActive: true
@@ -81,6 +100,7 @@ export function StoryDetailClient({ storyId }: StoryDetailClientProps) {
       description: storyData.description ?? "",
       category: storyData.category ?? "",
       status: storyData.status ?? "",
+      coverImageUrl: storyData.coverImageUrl ?? "",
       totalChapters: storyData.totalChapters,
       isCompleted: storyData.isCompleted,
       isActive: storyData.isActive
@@ -109,7 +129,6 @@ export function StoryDetailClient({ storyId }: StoryDetailClientProps) {
 
   async function saveStory() {
     setSaving(true);
-    setMessage(null);
     setError(null);
 
     const response = await fetch(`/api/stories/${storyId}`, {
@@ -123,6 +142,7 @@ export function StoryDetailClient({ storyId }: StoryDetailClientProps) {
         description: form.description || null,
         category: form.category || null,
         status: form.status || null,
+        coverImageUrl: form.coverImageUrl.trim() || null,
         totalChapters: form.totalChapters,
         isCompleted: form.isCompleted,
         isActive: form.isActive
@@ -137,13 +157,32 @@ export function StoryDetailClient({ storyId }: StoryDetailClientProps) {
 
     const payload = (await response.json()) as { story: AdminStoryDetail };
     setStory(payload.story);
-    setMessage("Đã lưu metadata truyện");
+    pushToast("Đã lưu metadata truyện", "success");
     setSaving(false);
+  }
+
+  async function uploadCover(file: File) {
+    setCoverUploading(true);
+    setError(null);
+    const formData = new FormData();
+    formData.set("cover", file);
+    const response = await fetch(`/api/stories/${storyId}/cover`, { method: "POST", body: formData });
+    setCoverUploading(false);
+    if (!response.ok) {
+      const payload = (await response.json().catch(() => null)) as { error?: string } | null;
+      const msg = payload?.error ?? "Upload ảnh bìa thất bại";
+      setError(msg);
+      pushToast(msg, "error");
+      return;
+    }
+    const payload = (await response.json()) as { coverImageUrl: string; story: AdminStoryDetail };
+    setStory(payload.story);
+    setForm((current) => ({ ...current, coverImageUrl: payload.coverImageUrl }));
+    pushToast("Đã upload ảnh bìa", "success");
   }
 
   async function saveCharMap() {
     setCharMapSaving(true);
-    setMessage(null);
     setError(null);
     const response = await fetch(`/api/stories/${storyId}/char-map`, {
       method: "PATCH",
@@ -162,7 +201,7 @@ export function StoryDetailClient({ storyId }: StoryDetailClientProps) {
     };
     setCharMap(payload.content ?? "");
     setCharMapMeta({ updatedAt: payload.updatedAt, updatedToChapter: payload.updatedToChapter });
-    setMessage("Đã lưu char map");
+    pushToast("Đã lưu char map", "success");
     setCharMapSaving(false);
   }
 
@@ -193,13 +232,99 @@ export function StoryDetailClient({ storyId }: StoryDetailClientProps) {
     }
   }
 
+  function confirmCopy(pending: PendingConfirm): { title: string; message: string; danger?: boolean } {
+    if (pending.kind === "bulk") {
+      const count = selectedChapters.length;
+      if (pending.action === "repolish") {
+        return {
+          title: `Re-polish ${count} chapter?`,
+          message: "Sẽ reset polished và enqueue job mới cho các chapter đã chọn.",
+          danger: true
+        };
+      }
+      if (pending.action === "retranslate") {
+        return {
+          title: `Re-translate ${count} chapter?`,
+          message: "Sẽ reset translated/polished và enqueue dịch lại cho các chapter đã chọn.",
+          danger: true
+        };
+      }
+      return {
+        title: `Bulk ${pending.action} ${count} chapter?`,
+        message: `Enqueue job ${pending.action} cho ${count} chapter đã chọn.`
+      };
+    }
+
+    const rangeLabel =
+      selectedChapters.length > 0
+        ? `${selectedChapters.length} chapter đã chọn`
+        : rangeFrom || rangeTo
+          ? `chapter ${rangeFrom || "1"}–${rangeTo || "cuối"}`
+          : "toàn bộ truyện (quality filter)";
+
+    switch (pending.action) {
+      case "recrawl_chapters":
+        return {
+          title: "Re-crawl và xóa raw?",
+          message:
+            "Hành động này xóa raw text hiện có và đánh dấu chapter để crawler tải lại. Không thể hoàn tác nhanh.",
+          danger: true
+        };
+      case "recrawl":
+        return {
+          title: "Re-crawl catalog?",
+          message: "Đánh dấu truyện để scheduler crawl lại metadata/catalog từ nguồn."
+        };
+      case "repolish":
+        return {
+          title: `Re-polish ${rangeLabel}?`,
+          message: "Reset polished và enqueue polish lại. Cần polish-worker đang chạy.",
+          danger: true
+        };
+      case "retranslate":
+        return {
+          title: `Re-translate ${rangeLabel}?`,
+          message: "Reset translated/polished và enqueue dịch lại. Tốn thời gian và tài nguyên LLM.",
+          danger: true
+        };
+      case "translate_metadata":
+        return pending.options?.skipChapterTitles
+          ? {
+              title: "Dịch metadata truyện?",
+              message: "Dịch title, mô tả, tác giả qua Ollama — chạy nền, xem log tại Scripts."
+            }
+          : {
+              title: `Dịch metadata + tiêu đề chapter (${rangeLabel})?`,
+              message: "Dịch metadata truyện và tiêu đề chapter trong range — chạy nền qua Ollama.",
+              danger: true
+            };
+      default:
+        return { title: "Xác nhận", message: "Tiếp tục thao tác pipeline?" };
+    }
+  }
+
+  function requestPipeline(
+    action: PipelineAction,
+    options: { clearRaw?: boolean; qualityOnly?: boolean; skipChapterTitles?: boolean } = {}
+  ) {
+    setPendingConfirm({ kind: "pipeline", action, options });
+  }
+
+  function requestBulk(action: BulkAction) {
+    if (!selectedChapters.length) return;
+    if (action === "repolish" || action === "retranslate") {
+      setPendingConfirm({ kind: "bulk", action });
+      return;
+    }
+    void runBulk(action);
+  }
+
   async function runBulk(
     action: "polish" | "audio" | "audio_segments" | "repolish" | "retranslate",
     force = false
   ) {
     if (!selectedChapters.length) return;
     setBulkLoading(action);
-    setMessage(null);
     setError(null);
     const response = await fetch(`/api/stories/${storyId}/chapters/bulk`, {
       method: "POST",
@@ -214,7 +339,7 @@ export function StoryDetailClient({ storyId }: StoryDetailClientProps) {
     }
     const payload = (await response.json()) as { results: Array<{ ok: boolean }> };
     const ok = payload.results.filter((r) => r.ok).length;
-    setMessage(`Bulk ${action}: ${ok}/${payload.results.length} thành công`);
+    pushToast(`Bulk ${action}: ${ok}/${payload.results.length} thành công`, "success");
     void load();
   }
 
@@ -223,7 +348,6 @@ export function StoryDetailClient({ storyId }: StoryDetailClientProps) {
     options: { clearRaw?: boolean; qualityOnly?: boolean; skipChapterTitles?: boolean } = {}
   ) {
     setPipelineLoading(action);
-    setMessage(null);
     setError(null);
 
     const fromChapter = rangeFrom ? Number(rangeFrom) : undefined;
@@ -253,23 +377,23 @@ export function StoryDetailClient({ storyId }: StoryDetailClientProps) {
       run?: { id: string };
     };
     if (payload.async && payload.run?.id) {
-      setMessage(
-        `${action} đang chạy nền — xem log tại Scripts (run ${payload.run.id.slice(0, 8)}…)`
+      pushToast(
+        `${action} đang chạy nền — xem log tại Scripts (run ${payload.run.id.slice(0, 8)}…)`,
+        "info"
       );
     } else if (payload.results?.length) {
       const ok = payload.results.filter((r) => r.ok).length;
-      setMessage(`${action}: ${ok}/${payload.results.length} chapter`);
+      pushToast(`${action}: ${ok}/${payload.results.length} chapter`, "success");
     } else if (payload.ok) {
-      setMessage(`Đã chạy ${action}`);
+      pushToast(`Đã chạy ${action}`, "success");
     } else {
-      setMessage(`Đã gửi yêu cầu ${action}`);
+      pushToast(`Đã gửi yêu cầu ${action}`, "success");
     }
     void load();
   }
 
   async function crawlThisStory() {
     setCrawlStoryLoading(true);
-    setMessage(null);
     setError(null);
     const response = await fetch("/api/pipeline/runs", {
       method: "POST",
@@ -287,9 +411,7 @@ export function StoryDetailClient({ storyId }: StoryDetailClientProps) {
       return;
     }
     const payload = (await response.json()) as { run: { id: string } };
-    setMessage(
-      `Đã bắt đầu crawl — xem log tại /operations?run=${payload.run.id.slice(0, 8)}…`
-    );
+    pushToast(`Đã bắt đầu crawl — xem log tại /operations?run=${payload.run.id.slice(0, 8)}…`, "info");
   }
 
   function qualityBadgeLabel(issue: string) {
@@ -309,45 +431,80 @@ export function StoryDetailClient({ storyId }: StoryDetailClientProps) {
     }
   }
 
-  if (loading) return <p>Đang tải...</p>;
+  if (loading) return <LoadingBlock variant="table" rows={10} />;
   if (!story) return <div className="alert alert-error">{error ?? "Không tìm thấy truyện"}</div>;
 
   return (
     <>
-      <div className="admin-header">
-        <div>
-          <Link href="/stories">← Danh sách</Link>
-          <h1>{form.displayTitle || form.title}</h1>
-          <div className="meta-list">
-            <span>ID: {story.id}</span>
-            <span>Source: {story.sourceCode}</span>
-            {story.sourceUrl ? (
-              <span>
-                Nguồn:{" "}
-                <a href={story.sourceUrl} target="_blank" rel="noreferrer">
-                  {story.sourceUrl}
-                </a>
-              </span>
-            ) : null}
-            <span>
-              Jobs: <Link href={`/jobs?storyId=${story.id}`}>Xem queue</Link>
-            </span>
-            <span>
-              Reader:{" "}
-              <a href={`${READER_URL}/stories/${story.id}`} target="_blank" rel="noreferrer">
-                Mở trên reader
-              </a>
-            </span>
-          </div>
-        </div>
+      <PageHeader
+        title={form.displayTitle || form.title}
+        description={`${story.sourceCode} · ${story.chapterCount ?? 0} chapters`}
+        breadcrumbs={[
+          { label: "Truyện", href: "/stories" },
+          { label: form.displayTitle || form.title }
+        ]}
+        actions={
+          <>
+            <a href={`${READER_URL}/stories/${story.id}`} target="_blank" rel="noreferrer" className="btn btn-secondary">
+              Mở reader
+            </a>
+            <Link href={`/jobs?storyId=${story.id}`} className="btn btn-secondary">
+              Hàng đợi
+            </Link>
+          </>
+        }
+      />
+
+      <div className="meta-list" style={{ marginBottom: 16 }}>
+        <span>ID: {story.id}</span>
+        {story.sourceUrl ? (
+          <span>
+            Nguồn:{" "}
+            <a href={story.sourceUrl} target="_blank" rel="noreferrer">
+              {story.sourceUrl}
+            </a>
+          </span>
+        ) : null}
       </div>
 
-      {message ? <div className="alert alert-success">{message}</div> : null}
       {error ? <div className="alert alert-error">{error}</div> : null}
 
       <div className="panel">
         <h2 style={{ marginTop: 0 }}>Metadata truyện</h2>
         <div className="form-grid">
+          <div style={{ display: "flex", gap: 16, alignItems: "flex-start", flexWrap: "wrap" }}>
+            {form.coverImageUrl.trim() ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={form.coverImageUrl.trim()} alt="Cover preview" className="cover-preview" />
+            ) : (
+              <div className="cover-preview-empty">Chưa có ảnh bìa</div>
+            )}
+            <label style={{ flex: 1, minWidth: 220 }}>
+              Cover image URL
+              <input
+                value={form.coverImageUrl}
+                placeholder="https://... hoặc upload file bên dưới"
+                onChange={(event) => setForm((current) => ({ ...current, coverImageUrl: event.target.value }))}
+              />
+            </label>
+          </div>
+          <div className="cover-upload-row">
+            <label className="btn btn-secondary btn-sm" style={{ cursor: "pointer" }}>
+              {coverUploading ? "Đang upload..." : "Upload ảnh bìa"}
+              <input
+                type="file"
+                accept="image/jpeg,image/png,image/webp"
+                hidden
+                disabled={coverUploading}
+                onChange={(event) => {
+                  const file = event.target.files?.[0];
+                  if (file) void uploadCover(file);
+                  event.currentTarget.value = "";
+                }}
+              />
+            </label>
+            <span style={{ color: "var(--muted)", fontSize: "0.82rem" }}>JPEG/PNG/WebP, tối đa 2MB</span>
+          </div>
           <label>
             Title (DB)
             <input value={form.title} onChange={(event) => setForm((current) => ({ ...current, title: event.target.value }))} />
@@ -420,6 +577,7 @@ export function StoryDetailClient({ storyId }: StoryDetailClientProps) {
         </div>
       </div>
 
+      {canRunPipeline ? (
       <div className="panel">
         <h2 style={{ marginTop: 0 }}>Pipeline & crawl</h2>
         <p style={{ color: "var(--muted)", marginTop: 0 }}>
@@ -464,15 +622,15 @@ export function StoryDetailClient({ storyId }: StoryDetailClientProps) {
             type="button"
             className="btn btn-secondary"
             disabled={Boolean(pipelineLoading)}
-            onClick={() => void runStoryPipeline("recrawl")}
+            onClick={() => requestPipeline("recrawl")}
           >
             {pipelineLoading === "recrawl" ? "..." : "Re-crawl catalog"}
           </button>
           <button
             type="button"
-            className="btn btn-secondary"
+            className="btn btn-danger"
             disabled={Boolean(pipelineLoading)}
-            onClick={() => void runStoryPipeline("recrawl_chapters", { clearRaw: true })}
+            onClick={() => requestPipeline("recrawl_chapters", { clearRaw: true })}
           >
             {pipelineLoading === "recrawl_chapters" ? "..." : "Re-crawl chapters (xóa raw)"}
           </button>
@@ -480,7 +638,7 @@ export function StoryDetailClient({ storyId }: StoryDetailClientProps) {
             type="button"
             className="btn btn-secondary"
             disabled={Boolean(pipelineLoading)}
-            onClick={() => void runStoryPipeline("translate_metadata", { skipChapterTitles: true })}
+            onClick={() => requestPipeline("translate_metadata", { skipChapterTitles: true })}
           >
             {pipelineLoading === "translate_metadata" ? "..." : "Dịch title / mô tả / tác giả"}
           </button>
@@ -488,7 +646,7 @@ export function StoryDetailClient({ storyId }: StoryDetailClientProps) {
             type="button"
             className="btn btn-secondary"
             disabled={Boolean(pipelineLoading)}
-            onClick={() => void runStoryPipeline("translate_metadata")}
+            onClick={() => requestPipeline("translate_metadata")}
           >
             {pipelineLoading === "translate_metadata" ? "..." : "+ Dịch tiêu đề chapter (range)"}
           </button>
@@ -496,7 +654,7 @@ export function StoryDetailClient({ storyId }: StoryDetailClientProps) {
             type="button"
             className="btn btn-secondary"
             disabled={Boolean(pipelineLoading)}
-            onClick={() => void runStoryPipeline("repolish", { qualityOnly: !rangeFrom && !rangeTo && !selectedChapters.length })}
+            onClick={() => requestPipeline("repolish", { qualityOnly: !rangeFrom && !rangeTo && !selectedChapters.length })}
           >
             {pipelineLoading === "repolish" ? "..." : "Re-polish range"}
           </button>
@@ -504,12 +662,15 @@ export function StoryDetailClient({ storyId }: StoryDetailClientProps) {
             type="button"
             className="btn btn-secondary"
             disabled={Boolean(pipelineLoading)}
-            onClick={() => void runStoryPipeline("retranslate", { qualityOnly: !rangeFrom && !rangeTo && !selectedChapters.length })}
+            onClick={() =>
+              requestPipeline("retranslate", { qualityOnly: !rangeFrom && !rangeTo && !selectedChapters.length })
+            }
           >
             {pipelineLoading === "retranslate" ? "..." : "Re-translate range"}
           </button>
         </div>
       </div>
+      ) : null}
 
       <div className="panel">
         <h2 style={{ marginTop: 0 }}>Char map</h2>
@@ -578,13 +739,13 @@ export function StoryDetailClient({ storyId }: StoryDetailClientProps) {
           </label>
         </div>
 
-        {selectedChapters.length > 0 ? (
+        {canRunPipeline && selectedChapters.length > 0 ? (
           <div className="toolbar bulk-toolbar">
             <span>{selectedChapters.length} chapter đã chọn</span>
-            <button type="button" className="btn btn-secondary" disabled={Boolean(bulkLoading)} onClick={() => void runBulk("repolish")}>
+            <button type="button" className="btn btn-secondary" disabled={Boolean(bulkLoading)} onClick={() => requestBulk("repolish")}>
               Bulk re-polish
             </button>
-            <button type="button" className="btn btn-secondary" disabled={Boolean(bulkLoading)} onClick={() => void runBulk("retranslate")}>
+            <button type="button" className="btn btn-secondary" disabled={Boolean(bulkLoading)} onClick={() => requestBulk("retranslate")}>
               Bulk re-translate
             </button>
             <button type="button" className="btn btn-secondary" disabled={Boolean(bulkLoading)} onClick={() => void runBulk("polish")}>
@@ -695,6 +856,24 @@ export function StoryDetailClient({ storyId }: StoryDetailClientProps) {
           </>
         ) : null}
       </div>
+
+      <ConfirmDialog
+        open={Boolean(pendingConfirm)}
+        title={pendingConfirm ? confirmCopy(pendingConfirm).title : ""}
+        message={pendingConfirm ? confirmCopy(pendingConfirm).message : ""}
+        danger={pendingConfirm ? confirmCopy(pendingConfirm).danger : false}
+        onCancel={() => setPendingConfirm(null)}
+        onConfirm={() => {
+          if (!pendingConfirm) return;
+          const pending = pendingConfirm;
+          setPendingConfirm(null);
+          if (pending.kind === "bulk") {
+            void runBulk(pending.action);
+          } else {
+            void runStoryPipeline(pending.action, pending.options ?? {});
+          }
+        }}
+      />
     </>
   );
 }

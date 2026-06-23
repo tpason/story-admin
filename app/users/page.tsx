@@ -1,15 +1,17 @@
-import { AdminShell } from "@/components/AdminShell";
+import { Suspense } from "react";
+import { AdminAppShell } from "@/components/AdminAppShell";
 import { UsersClient } from "@/components/UsersClient";
-import { getCurrentAdmin } from "@/lib/auth";
-import { redirect } from "next/navigation";
+import { LoadingBlock } from "@/components/ui/LoadingBlock";
+import { requireAdminPage } from "@/lib/admin-page-guard";
 
 export default async function UsersPage() {
-  const admin = await getCurrentAdmin();
-  if (!admin) redirect("/login");
+  const admin = await requireAdminPage("/users");
 
   return (
-    <AdminShell username={admin.username}>
-      <UsersClient />
-    </AdminShell>
+    <AdminAppShell username={admin.username} adminScope={admin.adminScope}>
+      <Suspense fallback={<LoadingBlock variant="table" rows={6} />}>
+        <UsersClient canManageAdmins={admin.adminScope === "full"} />
+      </Suspense>
+    </AdminAppShell>
   );
 }
