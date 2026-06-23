@@ -16,15 +16,17 @@ export function ActivityClient() {
 
   const page = Number(searchParams.get("page") ?? 1);
   const storyId = searchParams.get("storyId") ?? "";
+  const qualityOnly = searchParams.get("qualityOnly") === "1";
 
   const load = useCallback(async () => {
     setLoading(true);
     const params = new URLSearchParams({ page: String(page), pageSize: "40" });
     if (storyId) params.set("storyId", storyId);
+    if (qualityOnly) params.set("actionPrefix", "quality");
     const response = await fetch(`/api/activity?${params.toString()}`);
     if (response.ok) setData((await response.json()) as Paginated<ActivityLogRow>);
     setLoading(false);
-  }, [page, storyId]);
+  }, [page, qualityOnly, storyId]);
 
   useEffect(() => {
     void load();
@@ -57,6 +59,13 @@ export function ActivityClient() {
               }
             }}
           />
+          <button
+            type="button"
+            className={qualityOnly ? "btn" : "btn btn-secondary"}
+            onClick={() => updateFilters({ qualityOnly: qualityOnly ? null : "1", page: null })}
+          >
+            Chỉ QA
+          </button>
           <button type="button" className="btn btn-secondary" onClick={() => void load()}>
             Làm mới
           </button>

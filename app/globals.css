@@ -1260,6 +1260,11 @@ tr.row-selected td {
   background: var(--warning);
 }
 
+.trend-swatch.qa,
+.trend-bar.qa {
+  background: #c2410c;
+}
+
 .trend-chart {
   display: grid;
   grid-template-columns: repeat(7, minmax(0, 1fr));

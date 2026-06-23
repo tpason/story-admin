@@ -219,7 +219,7 @@ export function DashboardClient({ adminScope = "full" }: DashboardClientProps) {
           <div className="panel-header">
             <div>
               <h2>Xu hướng 7 ngày</h2>
-              <p>Polished chapters và jobs theo ngày</p>
+              <p>Polished chapters, jobs và QA lỗi theo ngày</p>
             </div>
           </div>
           <div className="trend-legend">
@@ -227,6 +227,7 @@ export function DashboardClient({ adminScope = "full" }: DashboardClientProps) {
             <span><span className="trend-swatch done" aria-hidden /> Jobs done</span>
             <span><span className="trend-swatch failed" aria-hidden /> Jobs failed</span>
             <span><span className="trend-swatch pipeline" aria-hidden /> Scripts failed</span>
+            <span><span className="trend-swatch qa" aria-hidden /> QA lỗi (quét)</span>
           </div>
           <div className="trend-chart">
             {data.trends.map((day) => {
@@ -234,7 +235,8 @@ export function DashboardClient({ adminScope = "full" }: DashboardClientProps) {
                 day.polishedChapters,
                 day.jobsDone,
                 day.jobsFailed,
-                day.pipelineRunsFailed
+                day.pipelineRunsFailed,
+                day.qaFailedChapters
               ]);
               return (
                 <div key={day.date} className="trend-column">
@@ -259,12 +261,18 @@ export function DashboardClient({ adminScope = "full" }: DashboardClientProps) {
                       style={{ height: `${(day.pipelineRunsFailed / max) * 100}%` }}
                       title={`Scripts failed: ${day.pipelineRunsFailed}`}
                     />
+                    <div
+                      className="trend-bar qa"
+                      style={{ height: `${(day.qaFailedChapters / max) * 100}%` }}
+                      title={`QA lỗi: ${day.qaFailedChapters}`}
+                    />
                   </div>
                   <div className="trend-label">{formatTrendDate(day.date)}</div>
                   <div className="trend-values">
                     <span>P {day.polishedChapters}</span>
                     <span>✓ {day.jobsDone}</span>
                     <span>✗ {day.jobsFailed}</span>
+                    <span>Q {day.qaFailedChapters}</span>
                   </div>
                 </div>
               );

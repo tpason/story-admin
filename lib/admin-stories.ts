@@ -152,9 +152,16 @@ export async function listQaTriageStories(options: {
   page?: number;
   pageSize?: number;
   mode?: "failed" | "pending" | "all";
+  sourceCode?: string;
 } = {}): Promise<Paginated<QaTriageStoryRow>> {
   const { page, pageSize, offset } = pageParams(options.page, options.pageSize);
   const mode = options.mode ?? "failed";
+  const sourceCode = options.sourceCode?.trim() || "";
+
+  const filterValues: unknown[] = [];
+  const storyWhere = sourceCode
+    ? (filterValues.push(sourceCode), `WHERE src.code = $${filterValues.length}`)
+    : "";
 
   const having =
     mode === "pending"
@@ -175,12 +182,16 @@ export async function listQaTriageStories(options: {
         FROM stories s
         JOIN sources src ON src.id = s.source_id
         LEFT JOIN chapters c ON c.story_id = s.id
+        ${storyWhere}
         GROUP BY s.id, src.code
         ${having}
       ) t
-    `
+    `,
+    filterValues
   );
 
+  const limitParam = filterValues.length + 1;
+  const offsetParam = filterValues.length + 2;
   const rows = await query<
     StoryListRow & { failed_chapters: string; pending_chapters: string }
   >(
@@ -215,12 +226,13 @@ export async function listQaTriageStories(options: {
       FROM stories s
       JOIN sources src ON src.id = s.source_id
       LEFT JOIN chapters c ON c.story_id = s.id
+      ${storyWhere}
       GROUP BY s.id, src.code
       ${having}
       ORDER BY ${orderSql}, s.updated_at DESC
-      LIMIT $1 OFFSET $2
+      LIMIT $${limitParam} OFFSET $${offsetParam}
     `,
-    [pageSize, offset]
+    [...filterValues, pageSize, offset]
   );
 
   const total = Number(countRows[0]?.count ?? 0);
@@ -332,6 +344,56 @@ export async function getQaIssueStats(limit = 20): Promise<QaIssueStatRow[]> {
   return rows.map((row) => ({ code: row.code, count: Number(row.count) }));
 }
 
+function csvEscape(value: string) {
+  if (/[",\n\r]/.test(value)) return `"${value.replace(/"/g, '""')}"`;
+  return value;
+}
+
+export async function exportStoryQaCsv(storyId: string): Promise<string> {
+  const rows = await query<{
+    chapter_number: number;
+    title: string;
+    quality_status: string | null;
+    quality_issues: unknown;
+    quality_repair_attempts: number;
+    quality_checked_at: Date | null;
+    quality_last_action: string | null;
+  }>(
+    `
+      SELECT
+        c.chapter_number,
+        c.title,
+        c.quality_status,
+        c.quality_issues,
+        c.quality_repair_attempts,
+        c.quality_checked_at,
+        c.quality_last_action
+      FROM chapters c
+      WHERE c.story_id = $1
+        AND c.quality_status IN ('failed', 'failed_manual', 'pending_audit', 'passed')
+        AND c.is_polished = TRUE
+        AND c.polished_text_content IS NOT NULL
+      ORDER BY c.chapter_number
+    `,
+    [storyId]
+  );
+
+  const header = "chapter_number,title,quality_status,issue_codes,repair_attempts,checked_at,last_action";
+  const lines = rows.map((row) => {
+    const codes = parseAuditIssueCodes(row.quality_issues).join("; ");
+    return [
+      row.chapter_number,
+      csvEscape(row.title ?? ""),
+      row.quality_status ?? "",
+      csvEscape(codes),
+      row.quality_repair_attempts,
+      row.quality_checked_at?.toISOString() ?? "",
+      csvEscape(row.quality_last_action ?? "")
+    ].join(",");
+  });
+  return [header, ...lines].join("\n");
+}
+
 function mapStoryRow(row: StoryListRow): AdminStoryRow {
   return {
     id: row.id,
@@ -417,6 +479,7 @@ export async function getDashboardTrends(days = 7) {
     jobs_done: string;
     jobs_failed: string;
     pipeline_failed: string;
+    qa_failed: string;
   }>(
     `
       WITH day_series AS (
@@ -443,7 +506,13 @@ export async function getDashboardTrends(days = 7) {
         COALESCE((
           SELECT COUNT(*)::text FROM admin_pipeline_runs r
           WHERE r.status = 'failed' AND r.created_at::date = ds.day
-        ), '0') AS pipeline_failed
+        ), '0') AS pipeline_failed,
+        COALESCE((
+          SELECT COUNT(*)::text FROM chapters c
+          WHERE c.quality_status IN ('failed', 'failed_manual')
+            AND c.quality_checked_at IS NOT NULL
+            AND c.quality_checked_at::date = ds.day
+        ), '0') AS qa_failed
       FROM day_series ds
       ORDER BY ds.day ASC
     `,
@@ -455,7 +524,8 @@ export async function getDashboardTrends(days = 7) {
     polishedChapters: Number(row.polished_chapters),
     jobsDone: Number(row.jobs_done),
     jobsFailed: Number(row.jobs_failed),
-    pipelineRunsFailed: Number(row.pipeline_failed)
+    pipelineRunsFailed: Number(row.pipeline_failed),
+    qaFailedChapters: Number(row.qa_failed)
   }));
 }
 

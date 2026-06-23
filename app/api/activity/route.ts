@@ -13,7 +13,8 @@ export async function GET(request: NextRequest) {
     const data = await listAdminActivity({
       page: Number(params.get("page") ?? 1),
       pageSize: Number(params.get("pageSize") ?? 40),
-      storyId: params.get("storyId") ?? undefined
+      storyId: params.get("storyId") ?? undefined,
+      actionPrefix: params.get("actionPrefix") ?? undefined
     });
     return NextResponse.json(data);
   } catch (error) {

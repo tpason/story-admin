@@ -31,6 +31,7 @@ export type DashboardTrendDay = {
   jobsDone: number;
   jobsFailed: number;
   pipelineRunsFailed: number;
+  qaFailedChapters: number;
 };
 
 export type PipelineRunSummary = {

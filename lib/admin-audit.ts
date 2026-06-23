@@ -85,6 +85,7 @@ export async function listAdminActivity(options: {
   page?: number;
   pageSize?: number;
   storyId?: string;
+  actionPrefix?: string;
 } = {}): Promise<Paginated<ActivityLogRow>> {
   const page = Math.max(1, options.page ?? 1);
   const pageSize = Math.min(100, Math.max(1, options.pageSize ?? 40));
@@ -95,6 +96,10 @@ export async function listAdminActivity(options: {
   if (options.storyId) {
     values.push(options.storyId);
     where.push(`story_id = $${values.length}`);
+  }
+  if (options.actionPrefix?.trim()) {
+    values.push(`${options.actionPrefix.trim()}%`);
+    where.push(`action LIKE $${values.length}`);
   }
 
   const whereSql = where.join(" AND ");

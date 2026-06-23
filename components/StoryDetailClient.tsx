@@ -927,6 +927,14 @@ export function StoryDetailClient({
                 lỗi.
               </p>
             </div>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              <a href={`/api/stories/${storyId}/quality-export`} className="btn btn-secondary btn-sm">
+                Xuất CSV QA
+              </a>
+              <Link href="/activity?qualityOnly=1" className="btn btn-ghost btn-sm">
+                Nhật ký QA
+              </Link>
+            </div>
           </div>
           <div className="alert alert-info" style={{ marginBottom: 14 }}>
             <strong>Vòng đảm bảo chất lượng:</strong> (1) Quét QA lưu mã lỗi → (2){" "}
@@ -1284,7 +1292,10 @@ export function StoryDetailClient({
                             </>
                           ) : null}
                           {chapter.hasFailedJob ? (
-                            <Link href={`/jobs?storyId=${storyId}&status=failed`} className="btn btn-ghost btn-sm">
+                            <Link
+                              href={`/jobs?storyId=${storyId}&status=failed&chapterNumber=${chapter.chapterNumber}`}
+                              className="btn btn-ghost btn-sm"
+                            >
                               Job
                             </Link>
                           ) : null}

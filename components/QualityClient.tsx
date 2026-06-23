@@ -14,6 +14,7 @@ type Mode = "failed" | "pending" | "all";
 
 type QualityPayload = Paginated<QaTriageStoryRow> & {
   issueStats?: QaIssueStat[];
+  sources?: string[];
 };
 
 export function QualityClient() {
@@ -25,11 +26,13 @@ export function QualityClient() {
 
   const page = Number(searchParams.get("page") ?? 1);
   const mode = (searchParams.get("mode") as Mode) || "failed";
+  const source = searchParams.get("source") ?? "";
 
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
     const params = new URLSearchParams({ page: String(page), pageSize: "30", mode });
+    if (source) params.set("source", source);
     const response = await fetch(`/api/quality?${params.toString()}`);
     if (!response.ok) {
       setError("Không tải được danh sách QA");
@@ -38,7 +41,7 @@ export function QualityClient() {
     }
     setData((await response.json()) as QualityPayload);
     setLoading(false);
-  }, [mode, page]);
+  }, [mode, page, source]);
 
   useEffect(() => {
     void load();
@@ -124,6 +127,18 @@ export function QualityClient() {
           >
             Có thể quét
           </button>
+          <select
+            value={source}
+            onChange={(event) => updateFilters({ source: event.target.value || null, page: null })}
+            aria-label="Lọc nguồn"
+          >
+            <option value="">Tất cả nguồn</option>
+            {(data?.sources ?? []).map((code) => (
+              <option key={code} value={code}>
+                {code}
+              </option>
+            ))}
+          </select>
         </div>
 
         {loading ? <LoadingBlock variant="table" rows={8} /> : null}
