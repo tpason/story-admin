@@ -1,3 +1,11 @@
+export type QualityDashboardStats = {
+  auditableChapters: number;
+  qaPassed: number;
+  qaFailed: number;
+  qaPending: number;
+  storiesWithQaFailed: number;
+};
+
 export type CoreDashboardStats = {
   totalStories: number;
   activeStories: number;
@@ -14,6 +22,7 @@ export type DashboardStats = CoreDashboardStats & {
   runningPipelineRuns: number;
   failedPipelineRuns24h: number;
   pendingModerationReports: number;
+  quality?: QualityDashboardStats;
 };
 
 export type DashboardTrendDay = {
@@ -52,11 +61,49 @@ export type AdminStoryRow = {
   updatedAt: string;
   chapterCount: number;
   polishedCount: number;
+  translatedCount: number;
   audioCount: number;
+  qualitySummary: StoryQualitySummary | null;
+};
+
+export type StoryHealthSummary = {
+  catalogGap: number;
+  missingPolished: number;
+  failedJobs: number;
+  stuckRunningJobs: number;
+  charMapStale: boolean;
+  charMapUpdatedToChapter: number | null;
+  warnings: string[];
+};
+
+export type StoryQualitySummary = {
+  auditableChapters: number;
+  passed: number;
+  failed: number;
+  pending: number;
 };
 
 export type AdminStoryDetail = AdminStoryRow & {
   metadata: Record<string, unknown> | null;
+  health: StoryHealthSummary | null;
+};
+
+export type QualityIssueDetail = {
+  code: string;
+  severity: string | null;
+  tier: number | null;
+  evidence: string | null;
+};
+
+export type QaTriageStoryRow = AdminStoryRow & {
+  failedChapters: number;
+  pendingChapters: number;
+};
+
+export type QaIssueStat = {
+  code: string;
+  count: number;
+  suggestedAction: "repolish" | "retranslate";
 };
 
 export type AdminChapterSummary = {
@@ -76,6 +123,13 @@ export type AdminChapterSummary = {
   hasFailedJob: boolean;
   outputRatio: number | null;
   qualityIssues: string[];
+  isAuditable: boolean;
+  qualityStatus: string | null;
+  qualityCheckedAt: string | null;
+  qualityAuditIssues: string[];
+  qualityIssueDetails: QualityIssueDetail[];
+  qualityRepairAttempts: number;
+  qualityLastAction: string | null;
 };
 
 export type AdminChapterDetail = AdminChapterSummary & {

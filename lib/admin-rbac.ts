@@ -18,6 +18,7 @@ const SCOPE_PERMISSIONS: Record<AdminScope, AdminPermission[]> = {
 const NAV_PERMISSIONS: Record<string, AdminPermission> = {
   "/": "dashboard",
   "/stories": "stories",
+  "/quality": "pipeline",
   "/jobs": "jobs",
   "/operations": "pipeline",
   "/activity": "pipeline",
@@ -49,6 +50,7 @@ export function hasPermission(scope: AdminScope, permission: AdminPermission) {
 
 export function canAccessPath(scope: AdminScope, pathname: string) {
   if (pathname.startsWith("/stories")) return hasPermission(scope, "stories");
+  if (pathname.startsWith("/quality")) return hasPermission(scope, "pipeline");
   if (pathname.startsWith("/jobs")) return hasPermission(scope, "jobs");
   if (pathname.startsWith("/operations")) return hasPermission(scope, "pipeline");
   if (pathname.startsWith("/activity")) return hasPermission(scope, "pipeline");

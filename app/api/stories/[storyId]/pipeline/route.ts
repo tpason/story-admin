@@ -1,12 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
 import { logAdminAction } from "@/lib/admin-audit";
 import { requireAdminPermission } from "@/lib/auth";
+import { assertQualityScanSpawnAllowed } from "@/lib/pipeline-qa-guard";
+import { hasExplicitQaScope } from "@/lib/pipeline-qa-policy";
 import { startAsyncPipelineRun } from "@/lib/pipeline-async";
 import {
   bulkPipelineChapters,
   requestChapterRecrawl,
   requestStoryRecrawl,
   resolveChapterNumbers,
+  runQualityAudit,
+  runQualityRepair,
   type PipelineChapterAction,
   type PipelineStoryAction
 } from "@/lib/pipeline-actions";
@@ -26,6 +30,13 @@ type PipelineBody = {
   clearRaw?: boolean;
   skipStory?: boolean;
   skipChapterTitles?: boolean;
+  onlyNeedingAudit?: boolean;
+  judgeSample?: number;
+  noJudge?: boolean;
+  repair?: boolean;
+  async?: boolean;
+  sync?: boolean;
+  fullStoryScan?: boolean;
 };
 
 function parseChapterNumbers(body: PipelineBody | null) {
@@ -135,8 +146,72 @@ export async function POST(request: NextRequest, context: RouteContext) {
       return NextResponse.json({ ok: true, action, results, chapterNumbers: bulk.payload?.chapter_numbers ?? chapterNumbers });
     }
 
+    if (action === "audit" || action === "repair" || action === "audit_fast") {
+      const chapterNumbers = rangeOptions.chapterNumbers ?? [];
+      let fromChapter = rangeOptions.fromChapter;
+      let toChapter = rangeOptions.toChapter;
+      if (chapterNumbers.length) {
+        fromChapter = Math.min(...chapterNumbers);
+        toChapter = Math.max(...chapterNumbers);
+      }
+
+      const fullStoryScan = Boolean(body?.fullStoryScan);
+      if (!hasExplicitQaScope({ chapterNumbers, fromChapter, toChapter, fullStoryScan })) {
+        return NextResponse.json(
+          {
+            error:
+              "Chọn chapter, nhập range, hoặc dùng «Rà soát toàn truyện» — quét QA chỉ chạy khi bạn chủ động chỉ định phạm vi."
+          },
+          { status: 400 }
+        );
+      }
+
+      const cliAction = action === "audit_fast" ? "audit_fast" : (action as "audit" | "repair");
+      const blocked = assertQualityScanSpawnAllowed(storyId, cliAction, {
+        fromChapter,
+        toChapter,
+        onlyNeedingAudit: Boolean(body?.onlyNeedingAudit),
+        noJudge: Boolean(body?.noJudge) || action === "audit_fast"
+      });
+      if (blocked) return blocked;
+
+      const scanOptions = {
+        fromChapter: fullStoryScan ? undefined : fromChapter,
+        toChapter: fullStoryScan ? undefined : toChapter,
+        chapterNumbers: fullStoryScan ? undefined : chapterNumbers.length ? chapterNumbers : undefined,
+        onlyNeedingAudit: Boolean(body?.onlyNeedingAudit),
+        judgeSample: body?.noJudge ? 0 : body?.judgeSample !== undefined ? Number(body.judgeSample) : undefined,
+        noJudge: Boolean(body?.noJudge),
+        repair: Boolean(body?.repair)
+      };
+
+      const apiAction = action === "audit_fast" ? "audit" : action;
+      const summary =
+        apiAction === "repair"
+          ? await runQualityRepair(storyId, scanOptions)
+          : await runQualityAudit(storyId, scanOptions);
+
+      await logAdminAction(admin, {
+        action: `pipeline.${action}`,
+        entityType: "story",
+        entityId: storyId,
+        storyId,
+        summary: `QA ${action}: ${summary.passed ?? 0}/${summary.audited ?? 0} passed`,
+        details: { ...summary, fullStoryScan } as Record<string, unknown>
+      });
+
+      return NextResponse.json({ ok: true, action, summary, async: false });
+    }
+
     const known: PipelineStoryAction[] = ["recrawl", "recrawl_chapters", "translate_metadata"];
-    if (!known.includes(action as PipelineStoryAction) && action !== "repolish" && action !== "retranslate") {
+    if (
+      !known.includes(action as PipelineStoryAction) &&
+      action !== "repolish" &&
+      action !== "retranslate" &&
+      action !== "audit" &&
+      action !== "audit_fast" &&
+      action !== "repair"
+    ) {
       return NextResponse.json({ error: "Unknown action" }, { status: 400 });
     }
 

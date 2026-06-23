@@ -83,6 +83,24 @@ Admin UI **không** implement lại business logic trong TypeScript — chỉ sp
 | Re-crawl chapters | `admin_pipeline_cli.py recrawl-chapters` |
 | Dịch metadata | `admin_pipeline_cli.py translate-metadata` → `backfill_metadata_titles.py` |
 
+### QA audit (admin hỗ trợ rà soát — user trigger)
+
+- **Pipeline scripts** (`polish_worker`, `chapter_save_guard`, …): kiểm tra chất lượng khi dịch/polish — **không đổi**.
+- **Admin**: xem `quality_status` / lỗi, triage (`/quality`), lọc chapter, đánh dấu pass/fail, **rà soát toàn truyện chỉ khi bấm nút** (có xác nhận). Không quét tự động nền.
+- Docker admin không spawn quét (`STORY_PIPELINE_DISABLE_QA_SPAWN=1`) — copy lệnh CLI chạy trên host khi cần.
+
+```bash
+# Rà soát toàn truyện — chapter chưa audit / lỗi (user chạy thủ công)
+viterbox/venv/bin/python scripts/story_pipeline/admin_pipeline_cli.py audit \
+  --story-id <uuid> --only-needing-audit --json
+
+# Phạm vi chapter
+viterbox/venv/bin/python scripts/story_pipeline/admin_pipeline_cli.py audit \
+  --story-id <uuid> --from-chapter 10 --to-chapter 50 --json
+```
+
+**Không** thêm worker QA tự chạy nền trong Docker.
+
 ```bash
 # CLI trực tiếp (không cần admin UI)
 viterbox/venv/bin/python scripts/story_pipeline/admin_pipeline_cli.py repolish \

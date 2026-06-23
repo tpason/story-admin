@@ -8,11 +8,25 @@ import { LoadingBlock } from "@/components/ui/LoadingBlock";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { useToast } from "@/components/ui/ToastProvider";
 import { formatNovelContent } from "@/lib/formatNovelContent";
+import {
+  qualityIssueLabel,
+  qualitySeverityBadgeClass,
+  qualityStatusBadgeClass,
+  qualityStatusLabel
+} from "@/lib/quality-display";
+import {
+  repairActionHint,
+  repairActionLabel,
+  repairBlockedReason,
+  suggestRepairAction
+} from "@/lib/quality-repair-routing";
 import type { AdminChapterDetail, AdminStoryDetail } from "@/lib/types";
 
 const READER_URL = process.env.NEXT_PUBLIC_STORY_READER_URL ?? "http://localhost:3000";
 
 type ContentTab = "polished" | "translated" | "raw";
+
+type ViewMode = "edit" | "preview" | "compare";
 
 type ChapterSnapshot = {
   title: string;
@@ -25,6 +39,7 @@ type ChapterEditorClientProps = {
   storyId: string;
   chapterNumber: number;
   canRunPipeline?: boolean;
+  canSpawnQualityScan?: boolean;
 };
 
 function snapshotFromChapter(chapter: AdminChapterDetail): ChapterSnapshot {
@@ -36,7 +51,12 @@ function snapshotFromChapter(chapter: AdminChapterDetail): ChapterSnapshot {
   };
 }
 
-export function ChapterEditorClient({ storyId, chapterNumber, canRunPipeline = true }: ChapterEditorClientProps) {
+export function ChapterEditorClient({
+  storyId,
+  chapterNumber,
+  canRunPipeline = true,
+  canSpawnQualityScan = true
+}: ChapterEditorClientProps) {
   const { pushToast } = useToast();
   const [story, setStory] = useState<AdminStoryDetail | null>(null);
   const [chapter, setChapter] = useState<AdminChapterDetail | null>(null);
@@ -45,8 +65,10 @@ export function ChapterEditorClient({ storyId, chapterNumber, canRunPipeline = t
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [contentTab, setContentTab] = useState<ContentTab>("polished");
-  const [viewMode, setViewMode] = useState<"edit" | "preview">("edit");
+  const [viewMode, setViewMode] = useState<ViewMode>("edit");
   const [enqueueLoading, setEnqueueLoading] = useState<string | null>(null);
+  const [qualityLoading, setQualityLoading] = useState<string | null>(null);
+  const [chapterAuditCli, setChapterAuditCli] = useState<string | null>(null);
   const [pendingTab, setPendingTab] = useState<ContentTab | null>(null);
 
   const [title, setTitle] = useState("");
@@ -98,6 +120,19 @@ export function ChapterEditorClient({ storyId, chapterNumber, canRunPipeline = t
   useEffect(() => {
     void load();
   }, [load]);
+
+  useEffect(() => {
+    if (canSpawnQualityScan) return;
+    void (async () => {
+      const response = await fetch(`/api/stories/${storyId}/quality-cli`);
+      if (!response.ok) return;
+      const payload = (await response.json()) as { cliExamples: { audit: string } };
+      const base = payload.cliExamples.audit.replace(/--only-needing-audit/g, "").trim();
+      setChapterAuditCli(
+        `${base} --from-chapter ${chapterNumber} --to-chapter ${chapterNumber} --judge-sample 1`
+      );
+    })();
+  }, [canSpawnQualityScan, chapterNumber, storyId]);
 
   useEffect(() => {
     if (!dirty.any) return;
@@ -195,6 +230,49 @@ export function ChapterEditorClient({ storyId, chapterNumber, canRunPipeline = t
     pushToast(labels[action] ?? "OK", "success");
   }
 
+  async function runQualityAction(action: "audit" | "pass" | "fail" | "smart_repair", forceAction?: "repolish" | "retranslate") {
+    setQualityLoading(action);
+    setError(null);
+    const response = await fetch(`/api/stories/${storyId}/chapters/${chapterNumber}/quality`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action, forceAction })
+    });
+    setQualityLoading(null);
+    if (!response.ok) {
+      const payload = (await response.json().catch(() => null)) as { error?: string } | null;
+      setError(payload?.error ?? "QA action thất bại");
+      return;
+    }
+    const payload = (await response.json()) as {
+      chapter?: AdminChapterDetail;
+      summary?: { passed?: number; audited?: number };
+      repair?: { results?: Array<{ action?: string }> };
+    };
+    if (payload.chapter) {
+      const snapshot = snapshotFromChapter(payload.chapter);
+      setChapter(payload.chapter);
+      setSaved(snapshot);
+    }
+    if (action === "smart_repair") {
+      const repairAction = payload.repair?.results?.[0]?.action ?? forceAction ?? "repair";
+      pushToast(`Đã enqueue ${repairAction} — chờ worker xong rồi bấm Quét QA chapter`, "success");
+      return;
+    }
+    if (payload.summary) {
+      pushToast(`QA: ${payload.summary.passed ?? 0}/${payload.summary.audited ?? 0} đạt`, "success");
+    } else {
+      pushToast(action === "pass" ? "Đã đánh dấu pass" : action === "fail" ? "Đã đánh dấu fail" : "Đã quét QA", "success");
+    }
+  }
+
+  const compareSource =
+    translatedContent.trim() || rawContent.trim()
+      ? translatedContent.trim()
+        ? translatedContent
+        : rawContent
+      : "";
+
   const previewParagraphs = useMemo(() => {
     const source =
       contentTab === "polished" ? polishedContent : contentTab === "translated" ? translatedContent : rawContent;
@@ -274,7 +352,138 @@ export function ChapterEditorClient({ storyId, chapterNumber, canRunPipeline = t
         </div>
       ) : null}
 
-      {chapter.qualityIssues.length > 0 ? (
+      {chapter.isAuditable || chapter.qualityStatus || chapter.qualityAuditIssues.length > 0 ? (
+        <div className="panel">
+          <div className="panel-header">
+            <div>
+              <h2>QA dịch/polish</h2>
+              <p>
+                {chapter.isAuditable
+                  ? "Chapter đủ điều kiện quét chất lượng"
+                  : "Chapter chưa đủ polished để quét QA"}
+              </p>
+            </div>
+            {chapter.qualityCheckedAt ? (
+              <span style={{ fontSize: "0.82rem", color: "var(--muted)" }}>
+                Quét: {new Date(chapter.qualityCheckedAt).toLocaleString("vi-VN")}
+              </span>
+            ) : null}
+          </div>
+          <div className="chapter-status">
+            <span className={qualityStatusBadgeClass(chapter.qualityStatus)}>
+              {qualityStatusLabel(chapter.qualityStatus, chapter.isAuditable)}
+            </span>
+            {chapter.qualityRepairAttempts > 0 ? (
+              <span className="badge badge-warn">repair ×{chapter.qualityRepairAttempts}</span>
+            ) : null}
+            {chapter.qualityLastAction ? (
+              <span className="badge badge-muted">{chapter.qualityLastAction}</span>
+            ) : null}
+          </div>
+          {chapter.qualityIssueDetails.length ? (
+            <div className="table-wrap" style={{ marginTop: 12 }}>
+              <table className="data-table">
+                <thead>
+                  <tr>
+                    <th>Mã</th>
+                    <th>Tier</th>
+                    <th>Mức</th>
+                    <th>Evidence</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {chapter.qualityIssueDetails.map((issue) => (
+                    <tr key={`${issue.code}-${issue.tier ?? ""}`}>
+                      <td>{qualityIssueLabel(issue.code)}</td>
+                      <td>{issue.tier ?? "—"}</td>
+                      <td>
+                        <span className={qualitySeverityBadgeClass(issue.severity)}>
+                          {issue.severity ?? "—"}
+                        </span>
+                      </td>
+                      <td style={{ maxWidth: 420, whiteSpace: "pre-wrap", fontSize: "0.85rem" }}>
+                        {issue.evidence ?? "—"}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <div className="chapter-status" style={{ marginTop: 8 }}>
+              {(chapter.qualityAuditIssues.length ? chapter.qualityAuditIssues : chapter.qualityIssues).map((issue) => (
+                <span key={issue} className="badge badge-danger" title={issue}>
+                  {qualityIssueLabel(issue)}
+                </span>
+              ))}
+            </div>
+          )}
+          {canRunPipeline ? (
+            <div className="toolbar" style={{ marginTop: 12, flexWrap: "wrap", gap: 8 }}>
+              {canSpawnQualityScan ? (
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  disabled={Boolean(qualityLoading) || !chapter.isAuditable}
+                  onClick={() => void runQualityAction("audit")}
+                >
+                  {qualityLoading === "audit" ? "..." : "Quét QA chapter"}
+                </button>
+              ) : chapterAuditCli ? (
+                <label style={{ display: "grid", gap: 4, flex: "1 1 100%" }}>
+                  <span style={{ fontSize: "0.85rem", color: "var(--muted)" }}>
+                    Quét QA chapter (CLI trên host — tốn GPU)
+                  </span>
+                  <textarea className="content-editor" readOnly value={chapterAuditCli} rows={2} style={{ minHeight: 0 }} />
+                </label>
+              ) : null}
+              {chapter && canRunPipeline
+                ? (() => {
+                    const issues = chapter.qualityAuditIssues.length
+                      ? chapter.qualityAuditIssues
+                      : chapter.qualityIssues;
+                    const suggested = suggestRepairAction(issues, chapter.qualityRepairAttempts);
+                    if (!suggested) return null;
+                    return (
+                      <button
+                        type="button"
+                        className="btn"
+                        disabled={Boolean(qualityLoading)}
+                        title={repairActionHint(suggested)}
+                        onClick={() => void runQualityAction("smart_repair", suggested)}
+                      >
+                        {qualityLoading === "smart_repair"
+                          ? "..."
+                          : `Sửa: ${repairActionLabel(suggested)}`}
+                      </button>
+                    );
+                  })()
+                : null}
+              {chapter && repairBlockedReason(chapter.qualityRepairAttempts) ? (
+                <span className="badge badge-warn">{repairBlockedReason(chapter.qualityRepairAttempts)}</span>
+              ) : null}
+              <button
+                type="button"
+                className="btn btn-secondary"
+                disabled={Boolean(qualityLoading)}
+                onClick={() => void runQualityAction("pass")}
+              >
+                {qualityLoading === "pass" ? "..." : "Đánh dấu pass"}
+              </button>
+              <button
+                type="button"
+                className="btn btn-secondary"
+                disabled={Boolean(qualityLoading)}
+                onClick={() => void runQualityAction("fail")}
+              >
+                {qualityLoading === "fail" ? "..." : "Đánh dấu fail"}
+              </button>
+            </div>
+          ) : null}
+        </div>
+      ) : null}
+
+      {chapter.qualityIssues.length > 0 && !chapter.isAuditable ? (
         <div className="panel">
           <div className="chapter-status">
             {chapter.qualityIssues.map((issue) => (
@@ -339,10 +548,31 @@ export function ChapterEditorClient({ storyId, chapterNumber, canRunPipeline = t
           >
             Preview reader
           </button>
+          <button
+            type="button"
+            role="tab"
+            data-active={viewMode === "compare" ? "true" : undefined}
+            onClick={() => setViewMode("compare")}
+          >
+            So sánh source/polished
+          </button>
           <span style={{ marginLeft: "auto", color: "var(--muted)", alignSelf: "center", fontSize: "0.85rem" }}>
             {activeContent.length.toLocaleString()} ký tự
           </span>
         </div>
+
+        {viewMode === "compare" ? (
+          <div className="compare-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+            <label>
+              Source ({translatedContent.trim() ? "translated" : "raw"})
+              <textarea className="content-editor" readOnly value={compareSource} style={{ minHeight: 360 }} />
+            </label>
+            <label>
+              Polished
+              <textarea className="content-editor" readOnly value={polishedContent} style={{ minHeight: 360 }} />
+            </label>
+          </div>
+        ) : null}
 
         {viewMode === "preview" ? (
           <div className="reader-preview">

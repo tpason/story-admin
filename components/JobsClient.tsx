@@ -20,11 +20,13 @@ export function JobsClient() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [retrying, setRetrying] = useState<string | null>(null);
+  const [bulkRetrying, setBulkRetrying] = useState(false);
 
   const page = Number(searchParams.get("page") ?? 1);
   const status = searchParams.get("status") ?? "";
   const jobType = searchParams.get("jobType") ?? "";
   const storyId = searchParams.get("storyId") ?? "";
+  const chapterNumber = searchParams.get("chapterNumber") ?? "";
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -33,6 +35,7 @@ export function JobsClient() {
     if (status) params.set("status", status);
     if (jobType) params.set("jobType", jobType);
     if (storyId) params.set("storyId", storyId);
+    if (chapterNumber) params.set("chapterNumber", chapterNumber);
 
     const response = await fetch(`/api/jobs?${params.toString()}`);
     if (!response.ok) {
@@ -42,7 +45,7 @@ export function JobsClient() {
     }
     setData((await response.json()) as Paginated<AdminJobRow>);
     setLoading(false);
-  }, [jobType, page, status, storyId]);
+  }, [chapterNumber, jobType, page, status, storyId]);
 
   useEffect(() => {
     void load();
@@ -74,6 +77,26 @@ export function JobsClient() {
       setError(msg);
       pushToast(msg, "error");
     }
+  }
+
+  async function bulkRetryVisibleFailed() {
+    setBulkRetrying(true);
+    const response = await fetch("/api/jobs/bulk-retry", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        storyId: storyId || undefined,
+        limit: 50
+      })
+    });
+    setBulkRetrying(false);
+    if (!response.ok) {
+      pushToast("Bulk retry thất bại", "error");
+      return;
+    }
+    const payload = (await response.json()) as { count: number };
+    pushToast(`Đã retry ${payload.count} job failed`, "success");
+    void load();
   }
 
   return (
@@ -108,6 +131,23 @@ export function JobsClient() {
               }
             }}
           />
+          <input
+            placeholder="Chapter #"
+            defaultValue={chapterNumber}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") {
+                updateFilters({ chapterNumber: (event.currentTarget.value || "").trim() || null });
+              }
+            }}
+          />
+          <button
+            type="button"
+            className="btn btn-secondary"
+            disabled={bulkRetrying || status !== "failed"}
+            onClick={() => void bulkRetryVisibleFailed()}
+          >
+            {bulkRetrying ? "..." : "Retry failed (50)"}
+          </button>
           <button type="button" className="btn btn-secondary" onClick={() => void load()}>
             Làm mới
           </button>

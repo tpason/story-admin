@@ -6,12 +6,13 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { LoadingBlock } from "@/components/ui/LoadingBlock";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { hasPermission, type AdminScope } from "@/lib/admin-rbac";
-import type { AdminJobRow, DashboardStats, DashboardTrendDay, PipelineRunSummary } from "@/lib/types";
+import type { AdminJobRow, DashboardStats, DashboardTrendDay, PipelineRunSummary, QualityDashboardStats } from "@/lib/types";
 
 type DashboardPayload = DashboardStats & {
   recentFailed: AdminJobRow[];
   recentPipelineRuns: PipelineRunSummary[];
   trends: DashboardTrendDay[];
+  quality?: QualityDashboardStats;
 };
 
 type DashboardClientProps = {
@@ -22,7 +23,10 @@ const RUN_ACTION_LABELS: Record<string, string> = {
   discover: "Discovery",
   crawl_stories: "Crawl batch",
   crawl_story: "Crawl story",
-  translate_metadata: "Dịch metadata"
+  translate_metadata: "Dịch metadata",
+  audit: "QA audit",
+  audit_fast: "QA nhanh",
+  repair: "QA + sửa"
 };
 
 function runStatusBadge(status: string) {
@@ -181,7 +185,34 @@ export function DashboardClient({ adminScope = "full" }: DashboardClientProps) {
             </div>
           </>
         ) : null}
+        {canPipeline && data.quality ? (
+          <>
+            <div className={`stat-card danger${data.quality.qaFailed > 0 ? "" : ""}`}>
+              <strong>{data.quality.qaFailed}</strong>
+              <span>Chapter QA lỗi</span>
+            </div>
+            <div className="stat-card warning">
+              <strong>{data.quality.qaPending}</strong>
+              <span>Chưa quét QA</span>
+            </div>
+            <div className="stat-card accent">
+              <strong>{data.quality.qaPassed}</strong>
+              <span>Đạt QA</span>
+            </div>
+            <div className="stat-card">
+              <strong>{data.quality.storiesWithQaFailed}</strong>
+              <span>Truyện có lỗi QA</span>
+            </div>
+          </>
+        ) : null}
       </div>
+
+      {canPipeline && data.quality && (data.quality.qaFailed > 0 || data.quality.qaPending > 0) ? (
+        <div className="alert alert-info" style={{ marginTop: 16 }}>
+          Có {data.quality.qaFailed} chapter lỗi QA trên {data.quality.storiesWithQaFailed} truyện.{" "}
+          <Link href="/quality">Mở trang QA triage →</Link>
+        </div>
+      ) : null}
 
       {canPipeline && data.trends?.length ? (
         <div className="panel" style={{ marginTop: 20 }}>

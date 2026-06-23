@@ -67,6 +67,7 @@ export async function listAdminJobs(options: {
   status?: string;
   jobType?: string;
   storyId?: string;
+  chapterNumber?: number;
 } = {}): Promise<Paginated<AdminJobRow>> {
   const page = Math.max(1, options.page ?? 1);
   const pageSize = Math.min(100, Math.max(1, options.pageSize ?? 40));
@@ -87,10 +88,19 @@ export async function listAdminJobs(options: {
     values.push(options.storyId);
     where.push(`j.story_id = $${values.length}`);
   }
+  if (options.chapterNumber && Number.isFinite(options.chapterNumber)) {
+    values.push(Math.floor(options.chapterNumber));
+    where.push(`c.chapter_number = $${values.length}`);
+  }
 
   const whereSql = where.join(" AND ");
   const countRows = await query<{ count: string }>(
-    `SELECT COUNT(*)::text AS count FROM story_jobs j WHERE ${whereSql}`,
+    `
+      SELECT COUNT(*)::text AS count
+      FROM story_jobs j
+      LEFT JOIN chapters c ON c.id = j.chapter_id
+      WHERE ${whereSql}
+    `,
     values
   );
 
@@ -151,6 +161,49 @@ export async function retryAdminJob(jobId: string, force = false) {
     [jobId, force]
   );
   return rows.length > 0;
+}
+
+export async function bulkRetryFailedJobs(options: {
+  storyId?: string;
+  jobIds?: string[];
+  limit?: number;
+}) {
+  const limit = Math.min(100, Math.max(1, options.limit ?? 50));
+  const values: unknown[] = [];
+  const where = ["status = 'failed'"];
+
+  if (options.jobIds?.length) {
+    values.push(options.jobIds);
+    where.push(`id = ANY($${values.length}::uuid[])`);
+  }
+  if (options.storyId) {
+    values.push(options.storyId);
+    where.push(`story_id = $${values.length}`);
+  }
+
+  values.push(limit);
+  const rows = await query<{ id: string }>(
+    `
+      UPDATE story_jobs
+      SET status = 'pending',
+          attempts = 0,
+          run_after = now(),
+          locked_by = NULL,
+          locked_at = NULL,
+          last_error = NULL,
+          updated_at = now()
+      WHERE id IN (
+        SELECT id
+        FROM story_jobs
+        WHERE ${where.join(" AND ")}
+        ORDER BY updated_at DESC
+        LIMIT $${values.length}
+      )
+      RETURNING id
+    `,
+    values
+  );
+  return rows.length;
 }
 
 type EnqueueContext = {

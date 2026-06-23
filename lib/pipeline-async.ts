@@ -33,7 +33,7 @@ export async function startAsyncPipelineRun(
 
   const run = await createPipelineRun(admin, {
     action: input.action,
-    storyId: input.storyId,
+    storyId: input.storyId ?? String(input.args?.storyId ?? ""),
     args: { ...input.args, cliArgs },
     command: commandLabel(command, args)
   });

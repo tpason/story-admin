@@ -15,7 +15,8 @@ export async function GET(request: NextRequest) {
       pageSize: Number(params.get("pageSize") ?? 40),
       status: params.get("status") ?? undefined,
       jobType: params.get("jobType") ?? undefined,
-      storyId: params.get("storyId") ?? undefined
+      storyId: params.get("storyId") ?? undefined,
+      chapterNumber: params.get("chapterNumber") ? Number(params.get("chapterNumber")) : undefined
     });
     return NextResponse.json(data);
   } catch (error) {

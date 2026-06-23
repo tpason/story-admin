@@ -10,6 +10,11 @@ function boolParam(value: string | null) {
   return value === "true";
 }
 
+function qaStatusParam(value: string | null): "passed" | "failed" | "pending" | undefined {
+  if (value === "passed" || value === "failed" || value === "pending") return value;
+  return undefined;
+}
+
 export async function GET(request: NextRequest, context: RouteContext) {
   const admin = await requireAdminPermission("stories");
   if (!admin) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
@@ -24,7 +29,9 @@ export async function GET(request: NextRequest, context: RouteContext) {
       search: params.get("q") ?? undefined,
       missingPolished: boolParam(params.get("missingPolished")),
       emptyTitle: boolParam(params.get("emptyTitle")),
-      hasQualityIssue: boolParam(params.get("hasQualityIssue"))
+      hasQualityIssue: boolParam(params.get("hasQualityIssue")),
+      qaStatus: qaStatusParam(params.get("qaStatus")),
+      auditableOnly: boolParam(params.get("auditableOnly"))
     });
     return NextResponse.json(data);
   } catch (error) {

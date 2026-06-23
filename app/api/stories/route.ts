@@ -16,7 +16,8 @@ export async function GET(request: NextRequest) {
 
   const params = request.nextUrl.searchParams;
   const sortParam = params.get("sort");
-  const sort = sortParam === "title" || sortParam === "chapters" ? sortParam : "updated";
+  const sort =
+    sortParam === "title" || sortParam === "chapters" || sortParam === "qa_failed" ? sortParam : "updated";
   try {
     const [data, sources] = await Promise.all([
       listAdminStories({
@@ -26,6 +27,8 @@ export async function GET(request: NextRequest) {
         sourceCode: params.get("source") ?? undefined,
         activeOnly: boolParam(params.get("activeOnly")),
         hasPolished: params.get("hasPolished") === "true",
+        hasQaFailed: params.get("hasQaFailed") === "true",
+        hasQaPending: params.get("hasQaPending") === "true",
         sort
       }),
       listSourceCodes()

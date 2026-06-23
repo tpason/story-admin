@@ -28,7 +28,10 @@ const ACTION_LABELS: Record<string, string> = {
   discover: "Discovery — tìm truyện mới",
   crawl_stories: "Crawl — chapter mới (batch)",
   crawl_story: "Crawl — một truyện",
-  translate_metadata: "Dịch metadata"
+  translate_metadata: "Dịch metadata",
+  audit: "QA audit (có judge)",
+  audit_fast: "QA nhanh (tier 0+1)",
+  repair: "QA + enqueue sửa"
 };
 
 type OperationsClientProps = {

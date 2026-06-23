@@ -1,6 +1,7 @@
 import { AdminAppShell } from "@/components/AdminAppShell";
 import { ChapterEditorClient } from "@/components/ChapterEditorClient";
 import { requireAdminPage } from "@/lib/admin-page-guard";
+import { isQualityScanSpawnAllowed } from "@/lib/pipeline-qa-policy";
 import { redirect } from "next/navigation";
 
 type PageProps = { params: Promise<{ storyId: string; chapterNumber: string }> };
@@ -17,6 +18,7 @@ export default async function ChapterEditorPage({ params }: PageProps) {
         storyId={storyId}
         chapterNumber={chapterNum}
         canRunPipeline={admin.adminScope !== "moderator"}
+        canSpawnQualityScan={isQualityScanSpawnAllowed()}
       />
     </AdminAppShell>
   );

@@ -24,6 +24,7 @@ type AdminShellProps = {
 const NAV_ITEMS = [
   { href: "/", label: "Tổng quan", icon: IconDashboard, match: (p: string) => p === "/" },
   { href: "/stories", label: "Truyện", icon: IconBook, match: (p: string) => p.startsWith("/stories") },
+  { href: "/quality", label: "QA", icon: IconShield, match: (p: string) => p.startsWith("/quality") },
   { href: "/jobs", label: "Hàng đợi", icon: IconQueue, match: (p: string) => p.startsWith("/jobs") },
   { href: "/operations", label: "Scripts", icon: IconTerminal, match: (p: string) => p.startsWith("/operations") },
   { href: "/activity", label: "Nhật ký", icon: IconActivity, match: (p: string) => p.startsWith("/activity") },

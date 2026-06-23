@@ -22,6 +22,8 @@ export function StoriesClient() {
   const source = searchParams.get("source") ?? "";
   const activeOnly = searchParams.get("activeOnly") === "true";
   const hasPolished = searchParams.get("hasPolished") === "true";
+  const hasQaFailed = searchParams.get("hasQaFailed") === "true";
+  const hasQaPending = searchParams.get("hasQaPending") === "true";
   const sort = searchParams.get("sort") ?? "updated";
 
   const load = useCallback(async () => {
@@ -32,6 +34,8 @@ export function StoriesClient() {
     if (source) params.set("source", source);
     if (activeOnly) params.set("activeOnly", "true");
     if (hasPolished) params.set("hasPolished", "true");
+    if (hasQaFailed) params.set("hasQaFailed", "true");
+    if (hasQaPending) params.set("hasQaPending", "true");
 
     const response = await fetch(`/api/stories?${params.toString()}`);
     if (!response.ok) {
@@ -41,7 +45,7 @@ export function StoriesClient() {
     }
     setData((await response.json()) as StoriesResponse);
     setLoading(false);
-  }, [activeOnly, hasPolished, page, q, sort, source]);
+  }, [activeOnly, hasPolished, hasQaFailed, hasQaPending, page, q, sort, source]);
 
   useEffect(() => {
     void load();
@@ -87,6 +91,7 @@ export function StoriesClient() {
             <option value="updated">Mới cập nhật</option>
             <option value="title">Tên A-Z</option>
             <option value="chapters">Nhiều chapter</option>
+            <option value="qa_failed">Nhiều lỗi QA</option>
           </select>
           <label className="checkbox-row">
             <input
@@ -103,6 +108,22 @@ export function StoriesClient() {
               onChange={(event) => updateFilters({ hasPolished: event.target.checked ? "true" : null })}
             />
             Có polished
+          </label>
+          <label className="checkbox-row">
+            <input
+              type="checkbox"
+              checked={hasQaFailed}
+              onChange={(event) => updateFilters({ hasQaFailed: event.target.checked ? "true" : null })}
+            />
+            Có lỗi QA
+          </label>
+          <label className="checkbox-row">
+            <input
+              type="checkbox"
+              checked={hasQaPending}
+              onChange={(event) => updateFilters({ hasQaPending: event.target.checked ? "true" : null })}
+            />
+            Chưa quét QA
           </label>
           <button type="button" className="btn btn-secondary" onClick={() => void load()}>
             Làm mới
@@ -154,6 +175,12 @@ export function StoriesClient() {
                         <div className="chapter-status">
                           <span className="badge badge-ok">P {story.polishedCount}</span>
                           <span className="badge badge-muted">A {story.audioCount}</span>
+                          {story.qualitySummary && story.qualitySummary.failed > 0 ? (
+                            <span className="badge badge-danger">QA {story.qualitySummary.failed}</span>
+                          ) : null}
+                          {story.qualitySummary && story.qualitySummary.pending > 0 ? (
+                            <span className="badge badge-warn">⏳ {story.qualitySummary.pending}</span>
+                          ) : null}
                         </div>
                       </td>
                       <td>
