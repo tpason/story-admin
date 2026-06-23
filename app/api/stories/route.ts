@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { listAdminStories, listSourceCodes } from "@/lib/admin-stories";
-import { requireAdmin } from "@/lib/auth";
+import { requireAdminPermission } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
@@ -11,8 +11,8 @@ function boolParam(value: string | null) {
 }
 
 export async function GET(request: NextRequest) {
-  const admin = await requireAdmin();
-  if (!admin) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const admin = await requireAdminPermission("stories");
+  if (!admin) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   const params = request.nextUrl.searchParams;
   const sortParam = params.get("sort");

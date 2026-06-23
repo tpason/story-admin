@@ -7,7 +7,7 @@ export default async function DashboardPage() {
 
   return (
     <AdminAppShell username={admin.username} adminScope={admin.adminScope}>
-      <DashboardClient />
+      <DashboardClient adminScope={admin.adminScope} />
     </AdminAppShell>
   );
 }

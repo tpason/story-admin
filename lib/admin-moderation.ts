@@ -60,6 +60,13 @@ function mapReport(row: ReportDbRow): CommentReportRow {
   };
 }
 
+export async function countPendingCommentReports() {
+  const rows = await query<{ count: string }>(
+    `SELECT COUNT(*)::text AS count FROM comment_reports WHERE status = 'pending'`
+  );
+  return Number(rows[0]?.count ?? 0);
+}
+
 export async function listPendingCommentReports(options: { page?: number; pageSize?: number } = {}) {
   const page = Math.max(1, options.page ?? 1);
   const pageSize = Math.min(50, Math.max(1, options.pageSize ?? 20));

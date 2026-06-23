@@ -312,11 +312,7 @@ export function StoryDetailClient({ storyId, canRunPipeline = true }: StoryDetai
 
   function requestBulk(action: BulkAction) {
     if (!selectedChapters.length) return;
-    if (action === "repolish" || action === "retranslate") {
-      setPendingConfirm({ kind: "bulk", action });
-      return;
-    }
-    void runBulk(action);
+    setPendingConfirm({ kind: "bulk", action });
   }
 
   async function runBulk(

@@ -1,27 +1,36 @@
 import { NextResponse } from "next/server";
+import { countPendingCommentReports } from "@/lib/admin-moderation";
 import { getPipelineRunStats, listRecentPipelineRuns } from "@/lib/admin-pipeline-runs";
 import { getDashboardStats, getDashboardTrends } from "@/lib/admin-stories";
 import { listRecentFailedJobs } from "@/lib/admin-jobs";
-import { requireAdmin } from "@/lib/auth";
+import { hasPermission } from "@/lib/admin-rbac";
+import { requireAdminPermission } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
 export async function GET() {
-  const admin = await requireAdmin();
-  if (!admin) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const admin = await requireAdminPermission("dashboard");
+  if (!admin) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   try {
-    const [stats, pipelineStats, recentFailed, recentPipelineRuns, trends] = await Promise.all([
-      getDashboardStats(),
-      getPipelineRunStats(),
-      listRecentFailedJobs(10),
-      listRecentPipelineRuns(5),
-      getDashboardTrends(7)
-    ]);
+    const canPipeline = hasPermission(admin.adminScope, "pipeline");
+    const canJobs = hasPermission(admin.adminScope, "jobs");
+
+    const [stats, pipelineStats, recentFailed, recentPipelineRuns, trends, pendingModerationReports] =
+      await Promise.all([
+        getDashboardStats(),
+        canPipeline ? getPipelineRunStats() : Promise.resolve({ runningRuns: 0, failedRuns24h: 0 }),
+        canJobs ? listRecentFailedJobs(10) : Promise.resolve([]),
+        canPipeline ? listRecentPipelineRuns(5) : Promise.resolve([]),
+        canPipeline ? getDashboardTrends(7) : Promise.resolve([]),
+        hasPermission(admin.adminScope, "moderation") ? countPendingCommentReports() : Promise.resolve(0)
+      ]);
+
     return NextResponse.json({
       ...stats,
       runningPipelineRuns: pipelineStats.runningRuns,
       failedPipelineRuns24h: pipelineStats.failedRuns24h,
+      pendingModerationReports,
       trends,
       recentFailed,
       recentPipelineRuns: recentPipelineRuns.map((run) => ({

@@ -13,6 +13,7 @@ export type CoreDashboardStats = {
 export type DashboardStats = CoreDashboardStats & {
   runningPipelineRuns: number;
   failedPipelineRuns24h: number;
+  pendingModerationReports: number;
 };
 
 export type DashboardTrendDay = {

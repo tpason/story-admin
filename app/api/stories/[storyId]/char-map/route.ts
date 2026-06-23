@@ -1,15 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import { logAdminAction } from "@/lib/admin-audit";
 import { getCharMapContent, updateCharMapContent } from "@/lib/admin-jobs";
-import { requireAdmin } from "@/lib/auth";
+import { requireAdminPermission } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
 type RouteContext = { params: Promise<{ storyId: string }> };
 
 export async function GET(_request: NextRequest, context: RouteContext) {
-  const admin = await requireAdmin();
-  if (!admin) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const admin = await requireAdminPermission("stories");
+  if (!admin) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   const { storyId } = await context.params;
   const data = await getCharMapContent(storyId);
@@ -17,8 +17,8 @@ export async function GET(_request: NextRequest, context: RouteContext) {
 }
 
 export async function PATCH(request: NextRequest, context: RouteContext) {
-  const admin = await requireAdmin();
-  if (!admin) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const admin = await requireAdminPermission("stories");
+  if (!admin) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   const { storyId } = await context.params;
   const body = (await request.json().catch(() => null)) as { content?: unknown } | null;

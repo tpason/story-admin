@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { logAdminAction } from "@/lib/admin-audit";
 import { getAdminChapter, updateAdminChapter } from "@/lib/admin-stories";
-import { requireAdmin } from "@/lib/auth";
+import { requireAdminPermission } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
@@ -16,8 +16,8 @@ function cleanText(value: unknown, maxLength: number) {
 }
 
 export async function GET(_request: NextRequest, context: RouteContext) {
-  const admin = await requireAdmin();
-  if (!admin) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const admin = await requireAdminPermission("stories");
+  if (!admin) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   const { storyId, chapterNumber } = await context.params;
   const chapterNum = Number(chapterNumber);
@@ -31,8 +31,8 @@ export async function GET(_request: NextRequest, context: RouteContext) {
 }
 
 export async function PATCH(request: NextRequest, context: RouteContext) {
-  const admin = await requireAdmin();
-  if (!admin) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const admin = await requireAdminPermission("stories");
+  if (!admin) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   const { storyId, chapterNumber } = await context.params;
   const chapterNum = Number(chapterNumber);

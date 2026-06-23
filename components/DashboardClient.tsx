@@ -5,12 +5,17 @@ import { useEffect, useState } from "react";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { LoadingBlock } from "@/components/ui/LoadingBlock";
 import { PageHeader } from "@/components/ui/PageHeader";
+import { hasPermission, type AdminScope } from "@/lib/admin-rbac";
 import type { AdminJobRow, DashboardStats, DashboardTrendDay, PipelineRunSummary } from "@/lib/types";
 
 type DashboardPayload = DashboardStats & {
   recentFailed: AdminJobRow[];
   recentPipelineRuns: PipelineRunSummary[];
   trends: DashboardTrendDay[];
+};
+
+type DashboardClientProps = {
+  adminScope?: AdminScope;
 };
 
 const RUN_ACTION_LABELS: Record<string, string> = {
@@ -57,9 +62,13 @@ function trendMax(values: number[]) {
   return Math.max(1, ...values);
 }
 
-export function DashboardClient() {
+export function DashboardClient({ adminScope = "full" }: DashboardClientProps) {
   const [data, setData] = useState<DashboardPayload | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const canStories = hasPermission(adminScope, "stories");
+  const canJobs = hasPermission(adminScope, "jobs");
+  const canPipeline = hasPermission(adminScope, "pipeline");
+  const canModeration = hasPermission(adminScope, "moderation");
 
   useEffect(() => {
     void (async () => {
@@ -89,63 +98,92 @@ export function DashboardClient() {
         description="Thống kê pipeline và hoạt động gần đây."
         actions={
           <>
-            <Link href="/operations" className="btn btn-secondary">
-              Scripts
-            </Link>
-            <Link href="/activity" className="btn btn-secondary">
-              Nhật ký
-            </Link>
-            <Link href="/jobs" className="btn btn-secondary">
-              Hàng đợi
-            </Link>
+            {canPipeline ? (
+              <>
+                <Link href="/operations" className="btn btn-secondary">
+                  Scripts
+                </Link>
+                <Link href="/activity" className="btn btn-secondary">
+                  Nhật ký
+                </Link>
+              </>
+            ) : null}
+            {canJobs ? (
+              <Link href="/jobs" className="btn btn-secondary">
+                Hàng đợi
+              </Link>
+            ) : null}
+            {canModeration ? (
+              <Link href="/moderation" className="btn btn-secondary">
+                Kiểm duyệt
+              </Link>
+            ) : null}
           </>
         }
       />
 
       <div className="stats-grid">
-        <div className="stat-card">
-          <strong>{data.totalStories}</strong>
-          <span>Truyện ({data.activeStories} đang active)</span>
-        </div>
-        <div className="stat-card">
-          <strong>{data.totalChapters}</strong>
-          <span>Chapters</span>
-        </div>
-        <div className="stat-card accent">
-          <strong>{data.polishedChapters}</strong>
-          <span>Đã polish</span>
-        </div>
-        <div className="stat-card">
-          <strong>{data.translatedChapters}</strong>
-          <span>Đã dịch</span>
-        </div>
-        <div className="stat-card">
-          <strong>{data.audioChapters}</strong>
-          <span>Có audio</span>
-        </div>
-        <div className="stat-card warning">
-          <strong>{data.pendingJobs}</strong>
-          <span>Jobs chờ xử lý</span>
-        </div>
-        <div className="stat-card">
-          <strong>{data.runningJobs}</strong>
-          <span>Jobs đang chạy</span>
-        </div>
-        <div className="stat-card danger">
-          <strong>{data.failedJobs}</strong>
-          <span>Jobs thất bại</span>
-        </div>
-        <div className="stat-card">
-          <strong>{data.runningPipelineRuns}</strong>
-          <span>Scripts đang chạy</span>
-        </div>
-        <div className="stat-card danger">
-          <strong>{data.failedPipelineRuns24h}</strong>
-          <span>Scripts lỗi (24h)</span>
-        </div>
+        {canModeration ? (
+          <div className={`stat-card${data.pendingModerationReports > 0 ? " warning" : ""}`}>
+            <strong>{data.pendingModerationReports}</strong>
+            <span>Báo cáo chờ duyệt</span>
+          </div>
+        ) : null}
+        {canStories ? (
+          <>
+            <div className="stat-card">
+              <strong>{data.totalStories}</strong>
+              <span>Truyện ({data.activeStories} đang active)</span>
+            </div>
+            <div className="stat-card">
+              <strong>{data.totalChapters}</strong>
+              <span>Chapters</span>
+            </div>
+            <div className="stat-card accent">
+              <strong>{data.polishedChapters}</strong>
+              <span>Đã polish</span>
+            </div>
+            <div className="stat-card">
+              <strong>{data.translatedChapters}</strong>
+              <span>Đã dịch</span>
+            </div>
+            <div className="stat-card">
+              <strong>{data.audioChapters}</strong>
+              <span>Có audio</span>
+            </div>
+          </>
+        ) : null}
+        {canJobs ? (
+          <>
+            <div className="stat-card warning">
+              <strong>{data.pendingJobs}</strong>
+              <span>Jobs chờ xử lý</span>
+            </div>
+            <div className="stat-card">
+              <strong>{data.runningJobs}</strong>
+              <span>Jobs đang chạy</span>
+            </div>
+            <div className="stat-card danger">
+              <strong>{data.failedJobs}</strong>
+              <span>Jobs thất bại</span>
+            </div>
+          </>
+        ) : null}
+        {canPipeline ? (
+          <>
+            <div className="stat-card">
+              <strong>{data.runningPipelineRuns}</strong>
+              <span>Scripts đang chạy</span>
+            </div>
+            <div className="stat-card danger">
+              <strong>{data.failedPipelineRuns24h}</strong>
+              <span>Scripts lỗi (24h)</span>
+            </div>
+          </>
+        ) : null}
       </div>
 
-      {data.trends?.length ? (
+      {canPipeline && data.trends?.length ? (
         <div className="panel" style={{ marginTop: 20 }}>
           <div className="panel-header">
             <div>
@@ -204,6 +242,7 @@ export function DashboardClient() {
         </div>
       ) : null}
 
+      {canPipeline ? (
       <div className="panel" style={{ marginTop: 20 }}>
         <div className="panel-header">
           <div>
@@ -237,8 +276,10 @@ export function DashboardClient() {
                       <span className={runStatusBadge(run.status)}>{run.status}</span>
                     </td>
                     <td>
-                      {run.storyId ? (
+                      {run.storyId && canStories ? (
                         <Link href={`/stories/${run.storyId}`}>{run.storyId.slice(0, 8)}…</Link>
+                      ) : run.storyId ? (
+                        run.storyId.slice(0, 8) + "…"
                       ) : (
                         "—"
                       )}
@@ -255,7 +296,9 @@ export function DashboardClient() {
           </div>
         )}
       </div>
+      ) : null}
 
+      {canJobs ? (
       <div className="panel">
         <div className="panel-header">
           <div>
@@ -288,17 +331,19 @@ export function DashboardClient() {
                       <span className={jobStatusBadge(job.status)}>{job.status}</span>
                     </td>
                     <td>
-                      {job.storyId ? (
+                      {job.storyId && canStories ? (
                         <Link href={`/stories/${job.storyId}`}>{job.storyTitle ?? job.storyId}</Link>
                       ) : (
-                        "—"
+                        job.storyTitle ?? job.storyId ?? "—"
                       )}
                     </td>
                     <td>
-                      {job.storyId && job.chapterNumber ? (
+                      {job.storyId && job.chapterNumber && canStories ? (
                         <Link href={`/stories/${job.storyId}/chapters/${job.chapterNumber}`}>
                           Ch.{job.chapterNumber}
                         </Link>
+                      ) : job.chapterNumber ? (
+                        `Ch.${job.chapterNumber}`
                       ) : (
                         "—"
                       )}
@@ -316,6 +361,21 @@ export function DashboardClient() {
           </div>
         )}
       </div>
+      ) : null}
+
+      {!canStories && !canJobs && !canPipeline && canModeration ? (
+        <div className="panel">
+          <EmptyState
+            title="Moderator dashboard"
+            description="Dùng Kiểm duyệt để xử lý báo cáo bình luận và Người dùng để cấm luận đạo."
+            action={
+              <Link href="/moderation" className="btn">
+                Mở kiểm duyệt
+              </Link>
+            }
+          />
+        </div>
+      ) : null}
     </>
   );
 }
